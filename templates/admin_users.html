@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block body %}
+
+<body class="bg-light">
+    <div class="container py-4">
+        <h1 class="mb-4">User List</h1>
+        <a href="/admin/sessions" class="btn btn-primary mb-3">View Login Sessions</a>
+        <form method="get" class="row g-2 mb-3">
+            <div class="col-md-2">
+                <input type="text" class="form-control" name="user_id" placeholder="User ID"
+                    value="{{ filters.user_id }}">
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control" name="username" placeholder="Username"
+                    value="{{ filters.username }}">
+            </div>
+            <div class="col-md-3">
+                <input type="text" class="form-control" name="email" placeholder="Email" value="{{ filters.email }}">
+            </div>
+            <div class="col-md-2">
+                <select name="user_type" class="form-select">
+                    <option value="">All Types</option>
+                    <option value="admin" {% if filters.user_type=='admin' %}selected{% endif %}>Admin</option>
+                    <option value="regular" {% if filters.user_type=='regular' %}selected{% endif %}>Regular</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <select name="disabled" class="form-select">
+                    <option value="">All</option>
+                    <option value="0" {% if filters.disabled=='0' %}selected{% endif %}>Active</option>
+                    <option value="1" {% if filters.disabled=='1' %}selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <select name="confirmed" class="form-select">
+                    <option value="">All</option>
+                    <option value="0" {% if filters.confirmed=='0' %}selected{% endif %}>Unconfirmed</option>
+                    <option value="1" {% if filters.confirmed=='1' %}selected{% endif %}>Confirmed</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-secondary w-100">Filter</button>
+            </div>
+
+            <p class="text-muted">
+                <strong>{{ user_count }}</strong> user{{ '' if user_count == 1 else 's' }} found.
+            </p>
+        </form>
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>User Type</th>
+                    <th>Currency</th>
+                    <th>Login Count</th>
+                    <th>Disabled</th>
+                    <th>Confirmed</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for user, login_count in user_data %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.user_type }}</td>
+                    <td>{{ user.currency }}</td>
+                    <td>{{ login_count }}</td>
+                    <td>{% if user.disabled %}<span class="text-danger">Disabled</span>{% else %}<span
+                            class="text-success">Active</span>{% endif %}</td>
+                    <td>{% if user.confirmed %}<span class="text-success">Yes</span>{% else %}<span
+                            class="text-danger">No</span>{% endif %}</td>
+                    <td>
+                        <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-primary">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+
+{% endblock %}

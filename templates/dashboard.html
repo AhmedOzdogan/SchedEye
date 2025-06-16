@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block styles %}
+<style>
+    .lesson.selected-lesson {
+        background-color: #9bd18b !important;
+        color: white;
+        font-weight: bold;
+        border: 0px solid #f80000;
+    }
+</style>
+</style>
+{% endblock %}
+
+{% block navbar %}
+<div class="ms-auto d-flex align-items-center gap-3">
+
+    <!-- Calendar Search Form -->
+    <form method="GET" action="{{ url_for('dashboard') }}" class="d-flex align-items-center gap-2 mb-0">
+        <div class="align-self-center">
+            <label for="selected_date" class="form-label fw-bold mb-0" style="width: 110px;">Select a date:</label>
+        </div>
+        <input type="date" id="selected_date" name="selected_date" class="form-control" style="max-width: 200px;"
+            required>
+        <button type="submit" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-calendar-event"></i> Search
+        </button>
+    </form>
+
+    <!-- Edit Dropdown -->
+    <div class="btn-group">
+        <button type="button" class="btn btn-success btn-sm dropdown-toggle" data-bs-toggle="dropdown"
+            aria-expanded="false">
+            Edit
+        </button>
+        <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('add_lesson') }}">Add A Lesson</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('payments') }}">Payments</a></li>
+            <li>
+                <hr class="dropdown-divider">
+            </li>
+            <li>
+                <a class="dropdown-item" href="{{ url_for('calculate_hours') }}">
+                    Calculate Hours
+                </a>
+            </li>
+        </ul>
+    </div>
+
+
+
+</div>
+{% endblock %}
+
+
+
+
+{% block body %}
+<h1 class="text-center my-4 text-primary">
+    Weekly Schedule ({{ start_date.strftime('%B %d') }} – {{ end_date.strftime('%B %d, %Y') }})
+</h1>
+
+<div class="table-responsive">
+    <table class="table table-bordered table-striped align-top text-left mx-auto" style="width: 80%;">
+        <thead class="table-primary">
+            <tr>
+                {% for day in week_dates %}
+                <th>{{ day.day_name }}<br><small>{{ day.day_date }}</small></th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                {% for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+                <td class="bg-white">
+                    {% for lesson in teaching_schedule_data %}
+                    {% set lesson_date = lesson[2] %}
+                    {% if lesson_date.strftime('%A') == day %}
+
+                    {% set start = lesson[3].total_seconds() | int %}
+                    {% set end = lesson[4].total_seconds() | int %}
+
+                    <div class="lesson p-2 border rounded mb-2 text-start" style="background-color: #e7f1ff;"
+                        data-lesson-id="{{ lesson[0] }}">
+                        <strong>{{ lesson[1] }}</strong><br>
+                        <span class="text-muted">{{ lesson[5] }}</span><br>
+                        <small>
+                            {{ "%02d:%02d" % (start // 3600, (start % 3600) // 60) }}
+                            –
+                            {{ "%02d:%02d" % (end // 3600, (end % 3600) // 60) }}
+                        </small><br>
+                        <small>{{ lesson[6] }}
+                            {{ current_user.currency }}</small><br>
+                        <small class="{{ 'text-success' if lesson[7] == 'yes' else 'text-danger' }}">
+                            Paid: {{ 'Yes' if lesson[7] == 'yes' else 'No' }}
+                        </small>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </td>
+                {% endfor %}
+            </tr>
+        </tbody>
+    </table>
+
+</div>
+
+<!-- Context Menu -->
+<div id="contextMenu" class="position-absolute bg-white border rounded shadow-sm p-2"
+    style="display:none; z-index: 1000;">
+    <button id="editOption" class="dropdown-item">✏️ Edit</button>
+    <button id="duplicateOption" class="dropdown-item">📄 Duplicate</button>
+    <button id="detailOption" class="dropdown-item">🔍 Details</button>
+    <button id="togglePaidOption" class="dropdown-item text-success">💰Paid</button>
+    <hr class="dropdown-divider">
+    <button id="toggleUnpaidOption" class="dropdown-item ">❌Unpaid</button>
+    <hr class="dropdown-divider">
+    <button id="toggleDeleteOption" class="dropdown-item text-danger">🗑️ Delete</button>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal fade" id="lessonDetailModal" tabindex="-1" aria-labelledby="lessonDetailLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="lessonDetailLabel">Lesson Details</h5>
+            </div>
+            <div class="modal-body" id="modalBodyContent">
+                <!-- This will be filled dynamically -->
+            </div>
+            <div class="modal-footer justify-content-between">
+                <a href="#" id="editBtn" class="btn btn-success">✏️ Edit</a>
+                <a href="#" id="duplicateBtn" class="btn btn-warning">📄 Duplicate</a>
+                <button id="deleteBtn" class="btn btn-danger">🗑️ Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Duplicate Modal -->
+<div class="modal fade" id="duplicateModal" tabindex="-1" aria-labelledby="duplicateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="duplicateModalLabel">Duplicate Selected Lessons</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="duplicateForm">
+                    <label for="copyDate" class="form-label">Copy to Date:</label>
+                    <input type="date" id="copyDate" name="copy_date" class="form-control" required>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="confirmDuplicateBtn" type="button" class="btn btn-primary">Duplicate</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let selectedLessons = new Set();
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.lesson').forEach(function (box) {
+            box.addEventListener('click', function () {
+                const lessonId = this.dataset.lessonId;
+
+                if (selectedLessons.has(lessonId)) {
+                    selectedLessons.delete(lessonId);
+                    this.classList.remove('selected-lesson');
+                } else {
+                    selectedLessons.add(lessonId);
+                    this.classList.add('selected-lesson');
+                }
+
+                console.log('Current selected lessons:', Array.from(selectedLessons));
+            });
+        });
+
+        // Optional: handle "process selected" button
+        const processButton = document.getElementById('processSelectedBtn');
+        if (processButton) {
+            processButton.addEventListener('click', function () {
+                submitSelectedLessons();
+            });
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const menu = document.getElementById("contextMenu");
+        let selectedLessonId = null;
+
+        // Show context menu on right-click of a lesson
+        document.addEventListener("contextmenu", function (e) {
+            const lessonBox = e.target.closest(".lesson");
+
+            if (lessonBox) {
+                e.preventDefault();
+                selectedLessonId = lessonBox.dataset.lessonId;
+
+                // Show menu near the cursor
+                menu.style.left = `${e.pageX}px`;
+                menu.style.top = `${e.pageY}px`;
+                menu.style.display = "block";
+            } else {
+                menu.style.display = "none";
+            }
+        });
+
+        // Hide context menu on regular click anywhere
+        document.addEventListener("click", function () {
+            menu.style.display = "none";
+        });
+
+        // Helper function to go to a specific route
+        function goToAction(action) {
+            if (selectedLessonId) {
+                window.location.href = `/${action}/${selectedLessonId}`;
+            }
+        }
+
+        // Edit action
+        document.getElementById("editOption").addEventListener("click", function () {
+            goToAction("edit");
+        });
+
+        // Duplicate action
+        document.getElementById("duplicateOption").addEventListener("click", function () {
+            if (selectedLessons.size === 1) {
+                const lessonId = Array.from(selectedLessons)[0];
+                window.location.href = `/duplicate/${lessonId}`;
+            } else if (selectedLessons.size > 1) {
+                // Show the calendar modal
+                const modal = new bootstrap.Modal(document.getElementById('duplicateModal'));
+                modal.show();
+            } else if (selectedLessonId) {
+                window.location.href = `/duplicate/${selectedLessonId}`;
+            }
+        });
+
+        // Handle duplicate confirmation
+        document.getElementById("confirmDuplicateBtn").addEventListener("click", function () {
+            const date = document.getElementById("copyDate").value;
+            if (!date) {
+                alert("Please select a date.");
+                return;
+            }
+
+            fetch("/duplicate_bulk", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    lesson_ids: Array.from(selectedLessons),
+                    copy_date: date
+                })
+            })
+                .then(res => {
+                    if (res.ok) {
+                        alert("Lessons duplicated!");
+                        location.reload();
+                    } else {
+                        alert("Something went wrong.");
+                    }
+                })
+                .catch(() => alert("Request failed."));
+        });
+
+        // Toggle paid status for selected lessons
+        document.getElementById("togglePaidOption").addEventListener("click", function () {
+            if (selectedLessons.size > 0) {
+                fetch("/toggle_paid", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lesson_ids: Array.from(selectedLessons)
+                    })
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            alert("Paid status updated for selected lessons!");
+                            location.reload();
+                        } else {
+                            alert("Something went wrong while updating.");
+                        }
+                    })
+                    .catch(() => {
+                        alert("Request failed.");
+                    });
+            }
+        });
+        // Toggle unpaid status for selected lessons
+        document.getElementById("toggleUnpaidOption").addEventListener("click", function () {
+            if (selectedLessons.size > 0) {
+                fetch("/toggle_unpaid", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lesson_ids: Array.from(selectedLessons)
+                    })
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            alert("Paid status updated for selected lessons!");
+                            location.reload();
+                        } else {
+                            alert("Something went wrong while updating.");
+                        }
+                    })
+                    .catch(() => {
+                        alert("Request failed.");
+                    });
+            }
+        });
+
+
+        document.getElementById("toggleDeleteOption").addEventListener("click", function () {
+            if (selectedLessons.size > 0 && confirm("Are you sure you want to delete these classes?")) {
+                fetch("/toggle_delete", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lesson_ids: Array.from(selectedLessons)
+                    })
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            alert("Classes successfully deleted!");
+                            location.reload();
+                        } else {
+                            alert("Something went wrong while deleting.");
+                        }
+                    })
+                    .catch(() => {
+                        alert("Request failed.");
+                    });
+            }
+        });
+    });
+    // Submit function to send selected IDs to backend
+    function submitSelectedLessons() {
+        const form = document.getElementById('selectionForm');
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'selected_lessons';
+        input.value = Array.from(selectedLessons).join(',');
+        form.appendChild(input);
+        form.submit();
+    }
+
+    function showExtraFields() {
+        const option = document.getElementById('option').value;
+        const copyField = document.getElementById('copyDateField');
+
+        // Hide by default
+        copyField.style.display = 'none';
+
+        if (option === 'Copy') {
+            copyField.style.display = 'block';
+        }
+    }
+
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Right-click: set selected lesson
+        document.querySelectorAll('.lesson').forEach(function (box) {
+            box.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                selectedLessonId = this.dataset.lessonId;
+                console.log("Right-clicked lesson ID:", selectedLessonId);
+
+                // Show your custom context menu if needed
+                const menu = document.getElementById("contextMenu");
+                if (menu) {
+                    menu.style.left = `${e.pageX}px`;
+                    menu.style.top = `${e.pageY}px`;
+                    menu.style.display = "block";
+                }
+            });
+        });
+
+        document.addEventListener("click", function (e) {
+            const menu = document.getElementById("contextMenu");
+
+            // FIX: Prevent this from running if a Bootstrap modal is visible
+            const isModalOpen = document.querySelector('.modal.show') !== null;
+            const isCloseButton = e.target.classList.contains('btn-close');
+            const clickedInsideModal = e.target.closest('.modal');
+
+            if (isModalOpen || clickedInsideModal || isCloseButton) {
+                return; // Let Bootstrap handle modal close
+            }
+
+            // Otherwise hide custom context menu
+            if (menu) {
+                menu.style.display = "none";
+            }
+
+        });
+
+
+
+        document.addEventListener("click", function (e) {
+            if (e.target && e.target.id === "detailOption") {
+                if (!selectedLessonId) return;
+
+                const lessonBox = document.querySelector(`[data-lesson-id="${selectedLessonId}"]`);
+                if (!lessonBox) return;
+
+                const className = lessonBox.querySelector('strong')?.textContent || '';
+                const school = lessonBox.querySelector('span')?.textContent || '';
+                const timeText = lessonBox.querySelectorAll('small')[0]?.textContent || '';
+                const rawRateText = lessonBox.querySelectorAll('small')[1]?.textContent || '';
+                const rawPaid = lessonBox.querySelectorAll('small')[2]?.textContent.split(':')[1]?.trim() || '';
+
+                console.log("rawRateText:", rawRateText);
+
+                // ✅ Extract start and end time safely
+                let totalHours = 0;
+                let durationStr = "Unknown";
+                let totalSalary = "N/A";
+                let formattedRate = "N/A";
+
+                if (timeText.includes('–')) {
+                    const [startStr, endStr] = timeText.split('–').map(s => s.trim());
+                    const [startHour, startMin] = startStr.split(':').map(Number);
+                    const [endHour, endMin] = endStr.split(':').map(Number);
+
+                    let start = startHour * 60 + startMin;
+                    let end = endHour * 60 + endMin;
+
+                    // Handle overnight classes
+                    if (end < start) {
+                        end += 24 * 60;
+                    }
+
+                    const totalMinutes = end - start;
+                    totalHours = totalMinutes / 60;
+
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+
+                    durationStr = '';
+                    if (hours > 0) durationStr += `${hours} hour${hours > 1 ? 's' : ''}`;
+                    if (minutes > 0 || hours === 0) {
+                        if (durationStr) durationStr += ' ';
+                        durationStr += `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+                    }
+                }
+
+
+                // ✅ Extract and format rate
+                let rate = null;
+                let currency = '';
+
+                lessonBox.querySelectorAll('small').forEach(small => {
+                    const rawText = small.textContent.replace(/\s+/g, ' ').trim(); // normalize spaces/newlines
+
+                    if (rawText.toLowerCase().includes('rate') || /^\d/.test(rawText)) {
+                        // Match number (with optional decimals)
+                        const rateMatch = rawText.match(/(\d+(?:\.\d+)?)/); // captures 490000.00
+                        // Match currency (letters only at the end)
+                        const currencyMatch = rawText.match(/([A-Za-z]+)$/); // captures VND
+
+                        if (rateMatch) {
+                            rate = parseFloat(rateMatch[1]);
+                        }
+                        if (currencyMatch) {
+                            currency = currencyMatch[1];
+                        }
+
+                        console.log('✅ Cleaned raw rate text:', rawText);
+                        console.log('➡️ Rate:', rate);
+                        console.log('➡️ Currency:', currency);
+                    }
+                });
+
+                if (rate !== null) {
+                    formattedRate = `${parseFloat(rate).toString()} ${currency}`;
+                    totalSalary = `${(rate * totalHours).toString()} ${currency}`;
+                }
+
+
+                const content = `
+            <p><strong>Class:</strong> ${className}</p>
+            <p><strong>School:</strong> ${school}</p>
+            <p><strong>Time:</strong> ${timeText}</p>
+            <p><strong>Duration:</strong> ${durationStr}</p>
+            <p><strong>Rate:</strong> ${formattedRate}</p>
+            <p><strong>Total Payment:</strong> ${totalSalary}</p>
+            <p><strong>Paid:</strong> ${rawPaid}</p>
+        `;
+                // Show the modal with the content
+                document.getElementById('modalBodyContent').innerHTML = content;
+                new bootstrap.Modal(document.getElementById('lessonDetailModal')).show();
+
+                // Update button links
+                document.getElementById('editBtn').href = `/edit/${selectedLessonId}`;
+                document.getElementById('duplicateBtn').href = `/duplicate/${selectedLessonId}`;
+
+                // Handle delete button
+                document.getElementById('deleteBtn').onclick = function () {
+                    if (confirm("Are you sure you want to delete this lesson?")) {
+                        fetch(`/toggle_delete/${selectedLessonId}`, {
+                            method: 'POST'
+                        }).then(response => {
+                            if (response.ok) {
+                                alert("Lesson deleted!");
+                                location.reload();
+                            } else {
+                                alert("Failed to delete.");
+                            }
+                        }).catch(() => alert("Request failed."));
+                    }
+                };
+
+                // Show the modal
+                new bootstrap.Modal(document.getElementById('lessonDetailModal')).show();
+            }
+        });
+
+    });
+
+</script>
+{% endblock %}

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{%block body %}
+<div class="container d-flex flex-column align-items-center justify-content-center" style="height: 85vh;">
+    <div class="col-md-4 bg-white p-4 rounded shadow">
+        <h3 class="text-center mb-4">{{page_title}}</h3>
+        <form method="POST" action="{{ form_action }}">
+            <div class="mb-3">
+                <label for="class_name" class="form-label">Class Name</label>
+                <input type="text" class="form-control" id="class_name" name="class_name" value="{{ lesson[1] }}"
+                    placeholder="First 3 letters should be name of the school" required>
+                {% if page_title == "Add Lesson" %}
+                <small class="form-text text-muted">(example : ARC - Sec 6B )</small>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <label for="date" class="form-label">Date</label>
+                <input type="date" id="selected_date" name="selected_date" class="form-control" value="{{ lesson[2] }}"
+                    required>
+            </div>
+            <div class="mb-3 d-flex justify-content-between w-100">
+                <div class="me-2 w-50">
+                    <label for="start_time" class="form-label">Start Time</label>
+                    <input type="time" id="start_time" name="start_time" class="form-control" value="{{ lesson[3] }}"
+                        required>
+                </div>
+                <div class="w-50">
+                    <label for="end_time" class="form-label">End Time</label>
+                    <input type="time" id="end_time" name="end_time" class="form-control" value="{{ lesson[4] }}"
+                        required>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="school" class="form-label">School</label>
+                <input type="text" id="school" name="school" class="form-control" value="{{ lesson[5] }}" required>
+            </div>
+            <div class="mb-3">
+                <label for="Rate" class="form-label">Rate</label>
+                <input type="number" id="rate" name="rate" class="form-control" value="{{ lesson[6] }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="Paid" class="form-label">Paid</label>
+                <select id="paid" name="paid" class="form-select" required>
+                    <option value="No" {% if lesson[7] !="yes" %}selected{% endif %}>No</option>
+                    <option value="yes" {% if lesson[7]=="yes" %}selected{% endif %}>Yes</option>
+                </select>
+            </div>
+
+            <div class="d-flex">
+                <button type="submit" class="btn btn-success w-50 me-2">Submit</button>
+                <a href="/dashboard" class="btn btn-danger w-50 text-center">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{%endblock %}

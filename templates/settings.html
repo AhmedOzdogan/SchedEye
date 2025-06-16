@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block body %}
+
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6 bg-white p-4 rounded shadow">
+                <h2 class="text-center mb-4">Settings</h2>
+                <p class="text-center mb-4">Update your account settings below.</p>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} mt-2">{{ message }}</div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                <!-- Account Info Form -->
+                <form method="POST" action="/update_account_info">
+                    <h5 class="mb-3">Account Info</h5>
+
+                    <div class="mb-3">
+                        <label for="username" class="form-label fw-bold">Username</label>
+                        <input type="text" class="form-control" id="username" name="username"
+                            value="{{ user.username }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-bold">Email address</label>
+                        <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}"
+                            required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="currency" class="form-label fw-bold">Currency</label>
+                        <select class="form-select" id="currency" name="currency" required>
+                            {% for code in currency_codes %}
+                            <option value="{{ code }}" {% if code==user.currency %}selected{% endif %}>{{ code }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="d-flex justify-content-between gap-2">
+                        <button type="submit" name="action" value="update_account" class="btn btn-success flex-fill"
+                            onclick="return confirm('Are you sure you want to update your account information?')">
+                            Update
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Password Change Form -->
+                <form method="POST" action="/change_password">
+                    <div class="my-4"></div>
+                    <h5 class="mb-3">Change Password</h5>
+
+                    <div class="mb-3">
+                        <label for="currentPassword" class="form-label fw-bold">Current Password</label>
+                        <input type="password" class="form-control" id="currentPassword" name="currentPassword"
+                            placeholder="Enter current password" autocomplete="off">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label fw-bold">New Password</label>
+                        <input type="password" class="form-control" id="newPassword" name="newPassword"
+                            placeholder="Enter new password" autocomplete="new-password">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="confirmPassword" class="form-label fw-bold">Confirm New Password</label>
+                        <input type="password" class="form-control" id="confirmPassword" name="confirmPassword"
+                            placeholder="Confirm new password" autocomplete="new-password">
+                    </div>
+
+                    <div class="d-flex justify-content-between gap-2">
+                        <button type="submit" name="action" value="update_password" class="btn btn-success flex-fill"
+                            onclick="return confirm('Are you sure you want to update your password?')">
+                            Update
+                        </button>
+                    </div>
+
+                    <div class="my-4"></div>
+
+                    <!-- Cancel Button -->
+                    <div class="d-flex justify-content-between gap-2">
+                        <button type="button" class="btn btn-secondary flex-fill"
+                            onclick="window.location.href='/dashboard'">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+{% endblock %}

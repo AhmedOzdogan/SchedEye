@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block body %}
+
+<body class="bg-light">
+    <div class="container-fluid py-4">
+        <h1 class="mb-4">Login Sessions</h1>
+        <a href="/admin/users" class="btn btn-secondary mb-3">Back to User List</a>
+
+        <form method="get" class="row g-2 align-items-end mb-3">
+            <div class="col-md-1">
+                <input type="text" class="form-control" name="user_id" placeholder="User ID"
+                    value="{{ filters.user_id }}">
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control" name="username" placeholder="Username"
+                    value="{{ filters.username }}">
+            </div>
+            <div class="col-md-2">
+                <input type="date" class="form-control" name="login_date" value="{{ filters.login_date }}">
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control" name="ip_address" placeholder="IP Address"
+                    value="{{ filters.ip_address }}">
+            </div>
+            <div class="col-md-2">
+                <input type="text" class="form-control" name="timezone" placeholder="Time Zone"
+                    value="{{ filters.timezone }}">
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="success" {% if filters.status=='success' %}selected{% endif %}>Success</option>
+                    <option value="wrong_password" {% if filters.status=='wrong_password' %}selected{% endif %}>Wrong
+                        Password</option>
+                    <option value="disabled" {% if filters.status=='disabled' %}selected{% endif %}>Disabled</option>
+                    <option value="unconfirmed" {% if filters.status=='unconfirmed' %}selected{% endif %}>Unconfirmed
+                    </option>
+                    <option value="forgot_password" {% if filters.status=='forgot_password' %}selected{% endif %}>Forgot
+                        Password</option>
+                    <option value="reset_password" {% if filters.status=='reset_password' %}selected{% endif %}>Reset
+                        Password</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+            <p class="text-muted">
+                <strong>{{ sessions_count }}</strong> session{{ '' if sessions_count == 1 else 's' }} found.
+            </p>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered text-center align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>User ID</th>
+                        <th>User</th>
+                        <th>Login Time</th>
+                        <th>Logout Time</th>
+                        <th>Duration</th>
+                        <th>User Agent</th>
+                        <th>Session Token</th>
+                        <th>IP Address</th>
+                        <th>TimeZone</th>
+                        <th>Status</th>
+
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td style="min-width: 50px; word-break: break-word;">{{ session.id }}</td>
+                        <td>{{ session.user_id }}</td>
+                        <td>{{ session.user.username }}</td>
+                        <td>{{ session.login_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td> {% if session.logout_time %}
+                            {{ session.logout_time.strftime('%Y-%m-%d %H:%M:%S') }}
+                            {% else %}
+                            <span style="color: red;">NO DATA</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if session.duration.__class__.__name__ != 'str' %}
+                            {{ session.duration }}
+                            {% else %}
+                            <span style="color: red;">{{ session.duration }}</span>
+                            {% endif %}
+                        </td>
+                        <td style="max-width: 300px; word-break: break-word;">{{ session.user_agent }}</td>
+                        <td style="max-width: 250px; word-break: break-word;">{{ session.session_token }}</td>
+                        <td>{{ session.ip_address }}</td>
+                        <td>{{ session.timezone }}</td>
+                        <td>{{ session.status }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+</body>
+
+</html>
+{% endblock %}

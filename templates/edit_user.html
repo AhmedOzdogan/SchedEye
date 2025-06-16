@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block body %}
+
+<div class="container mt-4">
+    <h2>Edit User</h2>
+    <form method="POST">
+        <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <input type="text" class="form-control" id="username" name="username" value="{{ user.username }}" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}" required>
+        </div>
+
+        <div class="mb-3">
+            <label for="user_type" class="form-label">User Type</label>
+            <select class="form-select" id="user_type" name="user_type">
+                <option value="regular" {% if user.user_type=='regular' %}selected{% endif %}>Regular</option>
+                <option value="admin" {% if user.user_type=='admin' %}selected{% endif %}>Admin</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="currency" class="form-label">Currency</label>
+            <select class="form-select" id="currency" name="currency" required>
+                {% for currency in currency_codes %}
+                <option value="{{ currency.strip() }}" {% if user.currency.strip()==currency.strip() %}selected{% endif
+                    %}>
+                    {{ currency.strip() }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="disabled" class="form-label">Account Status</label>
+            <select class="form-select" id="disabled" name="disabled">
+                <option value="0" {% if not user.disabled %}selected{% endif %}>Active</option>
+                <option value="1" {% if user.disabled %}selected{% endif %}>Disabled</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label for="note" class="form-label">Admin Note (optional)</label>
+            <textarea class="form-control" id="note" name="note" rows="2"
+                placeholder="Reason for change, if any..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="{{ url_for('admin_users') }}" class="btn btn-secondary">Cancel</a>
+
+
+        <div class="alert alert-info mt-4">
+            <strong>Login Statistics:</strong><br>
+            ✅ Successful Logins: {{ stats.get('success', 0) }}<br>
+            ❌ Wrong Password Attempts: {{ stats.get('wrong_password', 0) }}<br>
+            🚫 Disabled Login Attempts: {{ stats.get('disabled', 0) }}<br><br>
+
+            <strong>Account Action Summary:</strong><br>
+            🚫 Times Disabled: <strong>{{ disable_count }}</strong><br>
+            ✅ Times Re-enabled: <strong>{{ enable_count }}</strong><br><br>
+
+            <strong>Last Login:</strong>
+            {% if last_login %}
+            {{ last_login.login_time }} from {{ last_login.ip_address }}
+            {% else %}
+            No successful logins yet.
+            {% endif %}
+
+            <br><br>
+            <strong>Used IPs:</strong><br>
+            <ul>
+                {% for ip in ip_list %}
+                <li>{{ ip }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        <h5 class="mt-4">Recent Login Attempts</h5>
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Status</th>
+                    <th>IP</th>
+                    <th>User Agent</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in recent_attempts %}
+                <tr>
+                    <td>{{ session.login_time }}</td>
+                    <td>
+                        {% if session.status == 'success' %}
+                        <span class="text-success">Success</span>
+                        {% elif session.status == 'wrong_password' %}
+                        <span class="text-danger">Wrong Password</span>
+                        {% elif session.status == 'disabled' %}
+                        <span class="text-warning">Disabled</span>
+                        {% else %}
+                        {{ session.status }}
+                        {% endif %}
+                    </td>
+                    <td>{{ session.ip_address }}</td>
+                    <td style="max-width: 250px; word-break: break-word;">{{ session.user_agent }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h5 class="mt-5">Admin Action History</h5>
+        <table class="table table-sm table-bordered">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Action</th>
+                    <th>By Admin ID</th>
+                    <th>Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in admin_logs %}
+                <tr>
+                    <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ log.action }}</td>
+                    <td>{{ log.admin_id }}</td>
+                    <td>{{ log.note }}</td>
+                </tr>
+                {% endfor %}
+                {% if admin_logs|length == 0 %}
+                <tr>
+                    <td colspan="4" class="text-muted">No admin actions recorded yet.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </form>
+</div>
+
+{% endblock %}

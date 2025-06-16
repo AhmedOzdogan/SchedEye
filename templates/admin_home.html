@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block body %}
+
+<body class="bg-light">
+    <div class="container py-5">
+        <h1 class="mb-4">Admin Dashboard</h1>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Manage Users</h5>
+                        <p class="card-text">View and manage registered users.</p>
+                        <a href="/admin/users" class="btn btn-primary">Go to Users</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Login Sessions</h5>
+                        <p class="card-text">See user login and logout history.</p>
+                        <a href="/admin/sessions" class="btn btn-secondary">View Sessions</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+{% endblock %}
