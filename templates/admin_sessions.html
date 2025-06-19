@@ -10,7 +10,7 @@
         <a href="/admin/users" class="btn btn-secondary mb-3">Back to User List</a>
 
         <form method="get" class="row g-2 align-items-end mb-3">
-            <div class="col-md-1">
+            <div class="col-md-2">
                 <input type="text" class="form-control" name="user_id" placeholder="User ID"
                     value="{{ filters.user_id }}">
             </div>
@@ -26,10 +26,6 @@
                     value="{{ filters.ip_address }}">
             </div>
             <div class="col-md-2">
-                <input type="text" class="form-control" name="timezone" placeholder="Time Zone"
-                    value="{{ filters.timezone }}">
-            </div>
-            <div class="col-md-2">
                 <select name="status" class="form-select">
                     <option value="">All Statuses</option>
                     <option value="success" {% if filters.status=='success' %}selected{% endif %}>Success</option>
@@ -42,6 +38,7 @@
                         Password</option>
                     <option value="reset_password" {% if filters.status=='reset_password' %}selected{% endif %}>Reset
                         Password</option>
+                    <option value="blocked" {% if filters.status=='blocked' %}selected{% endif %}>Blocked</option>
                 </select>
             </div>
             <div class="col-md-1">
@@ -65,7 +62,6 @@
                         <th>User Agent</th>
                         <th>Session Token</th>
                         <th>IP Address</th>
-                        <th>TimeZone</th>
                         <th>Status</th>
 
                     </tr>
@@ -93,8 +89,8 @@
                         <td style="max-width: 300px; word-break: break-word;">{{ session.user_agent }}</td>
                         <td style="max-width: 250px; word-break: break-word;">{{ session.session_token }}</td>
                         <td>{{ session.ip_address }}</td>
-                        <td>{{ session.timezone }}</td>
-                        <td>{{ session.status }}</td>
+                        <td>{% if session.status != "success" %}<span class="text-danger">{{ session.status }}</span>{%
+                            else %}<span class="text-success">{{ session.status }}</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

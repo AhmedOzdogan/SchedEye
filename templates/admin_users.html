@@ -9,7 +9,7 @@
         <h1 class="mb-4">User List</h1>
         <a href="/admin/sessions" class="btn btn-primary mb-3">View Login Sessions</a>
         <form method="get" class="row g-2 mb-3">
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <input type="text" class="form-control" name="user_id" placeholder="User ID"
                     value="{{ filters.user_id }}">
             </div>
@@ -25,6 +25,22 @@
                     <option value="">All Types</option>
                     <option value="admin" {% if filters.user_type=='admin' %}selected{% endif %}>Admin</option>
                     <option value="regular" {% if filters.user_type=='regular' %}selected{% endif %}>Regular</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="date" class="form-control" name="registration_date"
+                    value="{{ filters.registration_date }}">
+            </div>
+            <div class="col-md-2">
+                <select name="last_login_filter" class="form-select">
+                    <option value="">All</option>
+                    <option value="today" {% if filters.last_login_filter=='today' %}selected{% endif %}>Today</option>
+                    <option value="last_week" {% if filters.last_login_filter=='last_week' %}selected{% endif %}>Last 7
+                        Days
+                    </option>
+                    <option value="last_month" {% if filters.last_login_filter=='last_month' %}selected{% endif %}>Last
+                        30
+                        Days</option>
                 </select>
             </div>
             <div class="col-md-1">
@@ -56,10 +72,13 @@
                     <th>Username</th>
                     <th>Email</th>
                     <th>User Type</th>
+                    <th>Registration Date</th>
                     <th>Currency</th>
                     <th>Login Count</th>
+                    <th>Last Login</th>
                     <th>Disabled</th>
                     <th>Confirmed</th>
+                    <th>Blocked</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -71,12 +90,19 @@
                     <td>{{ user.username }}</td>
                     <td>{{ user.email }}</td>
                     <td>{{ user.user_type }}</td>
+                    <td>{{ user.registration_date.strftime('%Y-%m-%d') }}</td>
                     <td>{{ user.currency }}</td>
                     <td>{{ login_count }}</td>
+                    <td>
+                        {% set last_login = last_login_map.get(user.id) %}
+                        {{ last_login.strftime('%Y-%m-%d %H:%M:%S') if last_login else 'Never' }}
+                    </td>
                     <td>{% if user.disabled %}<span class="text-danger">Disabled</span>{% else %}<span
                             class="text-success">Active</span>{% endif %}</td>
                     <td>{% if user.confirmed %}<span class="text-success">Yes</span>{% else %}<span
                             class="text-danger">No</span>{% endif %}</td>
+                    <td>{% if user.blocked %}<span class="text-danger">Yes</span>{% else %}<span
+                            class="text-success">No</span>{% endif %}</td>
                     <td>
                         <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-primary">Edit</a>
                     </td>

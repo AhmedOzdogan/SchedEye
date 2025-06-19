@@ -6,7 +6,6 @@ import uuid
 import os
 from dotenv import load_dotenv
 from flask import Flask, abort, render_template, request, redirect, session, url_for, flash
-from pytz import UnknownTimeZoneError, timezone, UTC
 from sqlalchemy import Date, cast, func
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -45,6 +44,29 @@ app.config['MAIL_DEFAULT_SENDER'] = os.getenv('EMAIL_NOREPLY_USERNAME')
 mail = Mail(app)
 
 
+currency_codes = [
+    " USD",  # Global standard
+    " VND",  # Vietnam
+    " THB",  # Thailand
+    " KHR",  # Cambodia
+    " LAK",  # Laos
+    " CNY",  # China
+    " MYR",  # Malaysia
+    " SGD",  # Singapore
+    " IDR",  # Indonesia
+    " PHP",  # Philippines
+    " TWD",  # Taiwan
+    " KRW",  # South Korea
+    " JPY",  # Japan
+    " INR",  # India
+    " HKD",  # Hong Kong
+
+    # European Currencies
+    " EUR", " GBP", " CHF", " SEK", " NOK", " DKK",
+    " PLN", " CZK", " HUF", " RON", " BGN"
+    ]
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
 
@@ -56,7 +78,9 @@ class User(UserMixin, db.Model):
     currency = db.Column(db.String(10), default=' USD') # instead of another func just add a space before it.
     disabled = db.Column(db.Boolean, default=False)  # to disable user accounts
     confirmed = db.Column(db.Boolean, default=False)  # to confirm user accounts
+    blocked = db.Column(db.Boolean, default=False)  # to block user accounts
     registration_date = db.Column(db.Date, default=date.today) 
+    login_attempts = db.Column(db.Integer, default=0)  # Track login attempts
 
     # Use string here
     sessions = db.relationship('UserSession', backref='user', lazy=True)
@@ -66,13 +90,12 @@ class UserSession(db.Model):
     __tablename__ = 'user_sessions'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     login_time = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     logout_time = db.Column(db.DateTime)
     ip_address = db.Column(db.String(45))
     user_agent = db.Column(db.String(255))
     session_token = db.Column(db.String(64))
-    timezone = db.Column(db.String(100))
     status = db.Column(db.String(32), default='success') 
     
 
@@ -138,94 +161,128 @@ def login():
     if request.method == 'POST':
         email = request.form['email']
         password = request.form['password']
-        timezone_str = request.form.get('timezone', 'UTC')
         
         session_token = str(uuid.uuid4())
         ip = request.remote_addr
         user_agent = request.user_agent.string
 
-        # Validate timezone
-        try:
-            timezone_obj = timezone(timezone_str)  # type: ignore
-        except UnknownTimeZoneError:
-            timezone_str = 'UTC'
-            timezone_obj = timezone('UTC') # type: ignore
-
         user = get_user_by_email(email)
 
-        # Wrong credentials
-        if user.confirmed is False: # type: ignore
+        # Generate session meta
+        session_token = str(uuid.uuid4())
+        ip = request.remote_addr
+        user_agent = request.user_agent.string
+        now = datetime.now(UTC)
+
+        # 1. If user is None (invalid email)
+        if not user:
             session_entry = UserSession(
-                user_id=user.id if user else None,  # ✅ capture user if email exists # type: ignore
+                user_id=None, # type: ignore
                 ip_address=ip, # type: ignore
                 user_agent=user_agent, # type: ignore
                 session_token=None, # type: ignore
-                login_time=datetime.now(timezone_obj), # type: ignore
-                timezone=timezone_str, # type: ignore
-                status='unconfirmed' # type: ignore
+                login_time=now, # type: ignore
+                status='invalid_email' # type: ignore
             )
             db.session.add(session_entry)
             db.session.commit()
-            
+            flash("Invalid email or password.", "danger")
+            return redirect(url_for('login'))
+
+        # 2. If user is blocked
+        if user.blocked:
+            session_entry = UserSession(
+                user_id=user.id, # type: ignore
+                ip_address=ip, # type: ignore
+                user_agent=user_agent, # type: ignore
+                session_token=session_token, # type: ignore
+                login_time=now, # type: ignore
+                status='blocked' # type: ignore
+            )
+            db.session.add(session_entry)
+            db.session.commit()
+            flash("Your account has been permanently blocked. Please contact the Admin for assistance (admin@schedeye.com).", "danger")
+            return redirect(url_for('login'))
+
+        # 3. If user is not confirmed
+        if not user.confirmed:
+            # send confirmation email again
             token = serializer.dumps(email, salt='email-confirm')
             confirm_url = url_for('confirm_email', token=token, _external=True)
             html = render_template('emails/register_email.html', confirm_url=confirm_url)
             send_email(email, 'Confirm Your Email - SchedEye', html)
 
-
-            flash('Your account is not confirmed. Please check your email.', 'danger')
-            return redirect(url_for('login'))
-        
-        elif not user or not check_password_hash(user.password_hash, password):
             session_entry = UserSession(
-                user_id=user.id if user else None,  # ✅ capture user if email exists # type: ignore
+                user_id=user.id, # type: ignore
                 ip_address=ip, # type: ignore
                 user_agent=user_agent, # type: ignore
                 session_token=None, # type: ignore
-                login_time=datetime.now(timezone_obj), # type: ignore
-                timezone=timezone_str, # type: ignore
-                status='wrong_password' # type: ignore
+                login_time=now, # type: ignore
+                status='unconfirmed' # type: ignore
             )
             db.session.add(session_entry)
             db.session.commit()
-            
-            flash('Your email or password is incorrect.', 'danger')
+            flash("Please confirm your email.", "danger")
             return redirect(url_for('login'))
 
-        # Disabled account
+        # 4. If password is wrong
+        if not check_password_hash(user.password_hash, password):
+            session_entry = UserSession(
+                user_id=user.id, # type: ignore
+                ip_address=ip, # type: ignore
+                user_agent=user_agent, # type: ignore
+                session_token=None, # type: ignore
+                login_time=now, # type: ignore
+                status='wrong_password' # type: ignore
+            )
+            db.session.add(session_entry)
+
+            user.login_attempts += 1
+            if user.login_attempts >= 5:
+                user.disabled = True
+                flash("Account disabled after too many failed login attempts.", "danger")
+            elif user.login_attempts == 4:
+                flash("Your account will be disabled after one more failed login attempt.", "warning")
+            else:
+                flash("Invalid email or password.", "danger")
+
+            db.session.commit()
+            return redirect(url_for('login'))
+
+        # 5. If disabled (after checking password)
         if user.disabled:
             session_entry = UserSession(
                 user_id=user.id, # type: ignore
                 ip_address=ip, # type: ignore
                 user_agent=user_agent, # type: ignore
                 session_token=session_token, # type: ignore
-                login_time=datetime.now(timezone_obj), # type: ignore
-                timezone=timezone_str, # type: ignore
+                login_time=now, # type: ignore
                 status='disabled' # type: ignore
             )
             db.session.add(session_entry)
             db.session.commit()
-            flash('Your account has been disabled.', 'danger')
+            flash("Your account is disabled. Please reset your password.", "danger")
             return redirect(url_for('login'))
 
+        # 6. SUCCESS
         login_user(user)
+        user.login_attempts = 0
 
         new_session = UserSession(
             user_id=user.id, # type: ignore
             ip_address=ip, # type: ignore
             user_agent=user_agent, # type: ignore
             session_token=session_token, # type: ignore
-            login_time=datetime.now(timezone_obj), # type: ignore
-            timezone=timezone_obj, # type: ignore
-            status='success' # type: ignore
+            login_time=now, # type: ignore
+            status='success' # type: ignore 
         )
 
         db.session.add(new_session)
         db.session.commit()
 
         session['session_token'] = session_token
-
         return redirect(url_for('dashboard'))
+
 
     return render_template('login.html')
 
@@ -321,23 +378,18 @@ def forgot_password():
         email = request.form['email']
         user = get_user_by_email(email)
         ip = request.remote_addr
-        timezone_str = request.form.get('timezone', 'UTC')
-        
-        try:
-            timezone_obj = timezone(timezone_str)
-        except UnknownTimeZoneError:
-            timezone_str = 'UTC'
-            timezone_obj = timezone('UTC')
 
-        if user:
+        if user.blocked: # type: ignore
+            flash('Your account has been blocked. Please contact <admin@schedeye.com> for assistance.', 'danger')
+            return redirect(url_for('login'))
+        
+        elif user:
             token = serializer.dumps(email, salt='password-reset')
             reset_url = url_for('reset_password', token=token, _external=True)
             html = render_template('emails/reset_password_email.html', reset_url=reset_url)
             send_email(email, 'Reset Your Password - SchedEye', html)
 
-        utc_now = datetime.utcnow().replace(tzinfo=UTC)
-        login_time = utc_now.astimezone(timezone_obj)
-        print(f"Login Time: {login_time}, Timezone: {timezone_str}, IP: {ip}")
+        login_time = datetime.now(UTC)
 
         new_session = UserSession(
             user_id=user.id if user else None, # type: ignore
@@ -346,7 +398,7 @@ def forgot_password():
             session_token=None, # type: ignore
             login_time=login_time, # type: ignore
             logout_time=login_time, # type: ignore
-            timezone=timezone_str, # type: ignore
+
             status='forgot_password' # type: ignore
         )
 
@@ -368,6 +420,22 @@ def reset_password(token):
         return redirect(url_for('forgot_password'))
     
     user = get_user_by_email(email)
+    
+    
+    if user and user.blocked:
+        session_entry = UserSession(
+        user_id=user.id, # type: ignore
+        ip_address=request.remote_addr, # type: ignore
+        user_agent=request.user_agent.string, # type: ignore
+        session_token=None, # type: ignore
+        login_time=datetime.now(UTC), # type: ignore
+        logout_time=datetime.now(UTC), # type: ignore
+        status='reset_password_blocked' # type: ignore
+    )
+        db.session.add(session_entry)
+        db.session.commit()
+        flash("Your account is blocked and cannot reset the password. Please contact admin.", "danger")
+        return redirect(url_for('login'))
 
     if request.method == 'POST':
         new_password = request.form['new_password']
@@ -382,17 +450,12 @@ def reset_password(token):
             return redirect(request.url)
 
         user.password_hash = generate_password_hash(new_password) # type: ignore
+        user.disabled = False # type: ignore
+        user.login_attempts = 0 # type: ignore
         db.session.commit()
         
         ip = request.remote_addr
         
-        timezone_str = request.form.get('timezone', 'UTC')
-        try:
-            timezone_obj = timezone(timezone_str)  # type: ignore
-        except UnknownTimeZoneError:
-            timezone_str = 'UTC'
-            timezone_obj = timezone('UTC') # type: ignore
-            
         user_id = user.id if user else None
          
         new_session = UserSession(
@@ -400,9 +463,8 @@ def reset_password(token):
             ip_address=ip, # type: ignore
             user_agent=None, # type: ignore
             session_token=None, # type: ignore
-            login_time=datetime.now(timezone_obj), # type: ignore
-            logout_time=datetime.now(timezone_obj), # type: ignore
-            timezone=timezone_obj, # type: ignore
+            login_time=datetime.now(UTC), # type: ignore
+            logout_time=datetime.now(UTC), # type: ignore
             status='reset password' # type: ignore
         )
         db.session.add(new_session)
@@ -492,12 +554,8 @@ def logout():
         try:
             user_session = UserSession.query.filter_by(session_token=session_token).first()
             if user_session and user_session.logout_time is None:
-                try:
-                    user_tz = timezone(user_session.timezone or 'UTC') # type: ignore
-                except UnknownTimeZoneError:
-                    user_tz = timezone('UTC') # type: ignore
 
-                user_session.logout_time = datetime.now(user_tz)
+                user_session.logout_time = datetime.now(UTC)
                 db.session.commit()
         except Exception as e:
             print(f"Failed to update logout time: {e}")
@@ -820,6 +878,8 @@ def admin_users():
     user_type = request.args.get('user_type', '').strip()
     disabled = request.args.get('disabled', '')
     confirmed = request.args.get('confirmed', '')
+    registration_date = request.args.get('registration_date', '')
+    last_login_filter = request.args.get('last_login_filter', '')
 
     query = db.session.query(
         User,
@@ -838,10 +898,45 @@ def admin_users():
         query = query.filter(User.disabled == (disabled == '1'))
     if confirmed in ('0', '1'):
         query = query.filter(User.confirmed == (confirmed == '1'))
+    if registration_date:
+        reg_date = datetime.strptime(registration_date, '%Y-%m-%d').date()
+        query = query.filter(User.registration_date == reg_date)
+    # inside your existing query-building block
+    if last_login_filter in ['today', 'last_week', 'last_month']:
+        now = datetime.utcnow()
+        if last_login_filter == 'today':
+            cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif last_login_filter == 'last_week':
+            cutoff = now - timedelta(days=7)
+        elif last_login_filter == 'last_month':
+            cutoff = now - timedelta(days=30)
+            
+        # Subquery: get latest login per user
+        recent_logins = db.session.query(
+            UserSession.user_id,
+            func.max(UserSession.login_time).label('last_login')
+        ).filter(UserSession.status == 'success'
+        ).group_by(UserSession.user_id).subquery()
+
+        # Join that subquery and filter by time
+        query = query.join(recent_logins, User.id == recent_logins.c.user_id
+        ).filter(recent_logins.c.last_login >= cutoff)
 
     user_data = query.group_by(User.id).all()
     
     user_count = len(user_data)
+    
+    # Build a dictionary of last logins per user ID
+    last_login_map = dict(
+    db.session.query(
+        UserSession.user_id,
+        func.max(UserSession.login_time)
+    ).filter(UserSession.status == 'success')
+     .group_by(UserSession.user_id)
+     .all()
+)
+
+    print(f"Last login: {last_login_map}")
 
     return render_template('admin_users.html', user_data=user_data, filters={
         'username': username,
@@ -849,7 +944,7 @@ def admin_users():
         'user_id': user_id,
         'user_type': user_type,
         'disabled': disabled
-    }, user_count=user_count)
+    }, user_count=user_count, last_login_map=last_login_map)
 
 @app.route('/admin/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @admin_required
@@ -864,11 +959,23 @@ def edit_user(user_id):
 
         # 🧠 Parse new disabled value as boolean
         new_disabled = request.form.get('disabled') == '1'
+        new_blocked = request.form.get('blocked') == '1'
 
         note_text = request.form.get('note', '').strip()
         print(f"Note text: {note_text}")
 
-        if user.disabled != new_disabled:
+        if user.blocked != new_blocked:
+            user.blocked = new_blocked
+            
+            log = AdminActionLog(
+                admin_id=current_user.id,  # type: ignore
+                target_user_id=user.id,  # type: ignore
+                action='block_user' if new_blocked else 'unblock_user',  # type: ignore
+                note=note_text or 'Changed from user edit page.'  # type: ignore
+            )
+            db.session.add(log)
+            
+        elif user.disabled != new_disabled:
             user.disabled = new_disabled
 
             log = AdminActionLog(
@@ -955,7 +1062,6 @@ def admin_sessions():
         'username': request.args.get('username', '').strip(),
         'login_date': request.args.get('login_date', '').strip(),
         'ip_address': request.args.get('ip_address', '').strip(),
-        'timezone': request.args.get('timezone', '').strip(),
         'status': request.args.get('status', '').strip(),
     }
 
@@ -969,8 +1075,6 @@ def admin_sessions():
         query = query.filter(cast(UserSession.login_time, Date) == filters['login_date'])
     if filters['ip_address']:
         query = query.filter(UserSession.ip_address.ilike(f"%{filters['ip_address']}%"))
-    if filters['timezone']:
-        query = query.filter(UserSession.timezone.ilike(f"%{filters['timezone']}%"))
     if filters['status']:
         query = query.filter(UserSession.status == filters['status'])
 
@@ -986,32 +1090,12 @@ def admin_sessions():
             s.duration = "Session failed due to wrong password."
         elif s.status == 'disabled':
             s.duration = "Session failed due to account being disabled."
+        elif s.status == 'blocked':
+            s.duration = "Session failed due to account being blocked."
         else:
             s.duration = "Session is active or expired."
 
     return render_template('admin_sessions.html', sessions=sessions, filters=filters, sessions_count=sessions_count)
-
-currency_codes = [
-    " USD",  # Global standard
-    " VND",  # Vietnam
-    " THB",  # Thailand
-    " KHR",  # Cambodia
-    " LAK",  # Laos
-    " CNY",  # China
-    " MYR",  # Malaysia
-    " SGD",  # Singapore
-    " IDR",  # Indonesia
-    " PHP",  # Philippines
-    " TWD",  # Taiwan
-    " KRW",  # South Korea
-    " JPY",  # Japan
-    " INR",  # India
-    " HKD",  # Hong Kong
-
-    # European Currencies
-    " EUR", " GBP", " CHF", " SEK", " NOK", " DKK",
-    " PLN", " CZK", " HUF", " RON", " BGN"
-    ]
 
 @app.route('/settings', methods=['GET'])
 @login_required
@@ -1478,10 +1562,10 @@ def test_register_email():
     token = serializer.dumps(dummy_email, salt='email-confirm')
     confirm_url = url_for('confirm_email', token=token, _external=True)
 
-    html = render_template('emails/register_email.html', confirm_url=confirm_url)
-    send_email(dummy_email, 'Confirm Your Email - SchedEye', html)
+    html = render_template('emails/reset_password_email.html', reset_url=confirm_url)
+    send_email(dummy_email, 'Reset Your Password - SchedEye', html)
 
-    return "✅ Test registration email sent!"
+    return "✅ Test reset password email sent!"
 
 
 if __name__ == '__main__':

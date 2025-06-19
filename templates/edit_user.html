@@ -46,6 +46,14 @@
         </div>
 
         <div class="mb-3">
+            <label for="blocked" class="form-label">Account Blocked</label>
+            <select class="form-select" id="blocked" name="blocked">
+                <option value="0" {% if not user.blocked %}selected{% endif %}>No</option>
+                <option value="1" {% if user.blocked %}selected{% endif %}>Yes</option>
+            </select>
+        </div>
+
+        <div class="mb-3">
             <label for="note" class="form-label">Admin Note (optional)</label>
             <textarea class="form-control" id="note" name="note" rows="2"
                 placeholder="Reason for change, if any..."></textarea>
