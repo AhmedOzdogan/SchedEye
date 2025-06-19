@@ -23,12 +23,14 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login' # type: ignore
 
-app.secret_key = 'your_secret'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:Ahmed.4091@localhost/shedeye'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app) 
-
 load_dotenv()
+
+app.secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
 serializer = URLSafeTimedSerializer(app.secret_key)  # type: ignore
 
 # Configure Flask-Mail
