@@ -9,55 +9,58 @@
 {% block navbar %}{% endblock %}
 
 {% block body %}
-<div class="container d-flex flex-column align-items-center justify-content-center" style="height: 80vh;">
-    <img src="{{ url_for('static', filename='images/logo-schedeye.png') }}" alt="SchedEye Logo" class="img-fluid mb-4"
-        style="max-width: 250px;">
+<div class="container d-flex flex-column align-items-center justify-content-center px-3" style="min-height: 85vh;">
+    <img src="{{ url_for('static', filename='images/logo-schedeye.png') }}" alt="SchedEye Logo"
+        class="img-fluid mb-4 d-none d-md-block" style="max-width: 180px;">
 
-    <div class="col-md-4 bg-white p-4 rounded shadow">
-        <h3 class="text-center mb-4">Login</h3>
+    <div class="w-100" style="max-width: 420px;">
+        <div class="bg-white p-4 rounded shadow">
+            <h3 class="text-center mb-4">Login</h3>
 
-        <form method="POST" action="/login">
-            <div class="mb-3">
-                <label for="email" class="form-label">Email address</label>
-                <input type="email" class="form-control" id="email" name="email" required>
-            </div>
-
-            <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
-                <div class="input-group">
-                    <input type="password" class="form-control" id="password" name="password" required>
-                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
-                        <i class="bi bi-eye" id="passwordIcon"></i>
-                    </button>
+            <form method="POST" action="/login">
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email address</label>
+                    <input type="email" class="form-control" id="email" name="email" required>
                 </div>
-            </div>
 
-            <input type="hidden" name="recaptcha_token" id="recaptcha_token">
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <div class="input-group">
+                        <input type="password" class="form-control" id="password" name="password" required>
+                        <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                            <i class="bi bi-eye" id="passwordIcon"></i>
+                        </button>
+                    </div>
+                </div>
 
-            <div class="d-grid">
-                <button type="submit" class="btn btn-primary">Log In</button>
-            </div>
+                <input type="hidden" name="recaptcha_token" id="recaptcha_token">
 
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show mt-2" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-        </form>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">Log In</button>
+                </div>
 
-        <p class="text-center mt-3">
-            Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
-        </p>
-        <p class="text-center mt-3">
-            Forgot your password? <a href="{{ url_for('forgot_password') }}">Reset it here</a>
-        </p>
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show mt-3" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+            </form>
+
+            <p class="text-center mt-3">
+                Don't have an account? <a href="{{ url_for('register') }}">Register here</a>
+            </p>
+            <p class="text-center mt-2">
+                Forgot your password? <a href="{{ url_for('forgot_password') }}">Reset it here</a>
+            </p>
+        </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
