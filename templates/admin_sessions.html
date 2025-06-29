@@ -39,6 +39,8 @@
                     <option value="reset_password" {% if filters.status=='reset_password' %}selected{% endif %}>Reset
                         Password</option>
                     <option value="blocked" {% if filters.status=='blocked' %}selected{% endif %}>Blocked</option>
+                    <option value="invalid_captcha" {% if filters.status=='invalid_captcha' %}selected{% endif %}>
+                        Invalid CAPTCHA</option>
                 </select>
             </div>
             <div class="col-md-1">

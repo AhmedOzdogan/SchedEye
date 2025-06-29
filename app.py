@@ -1,4 +1,5 @@
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone, time
+import time as time_module
 from flask_mail import Mail, Message
 from functools import wraps
 import time
@@ -6,12 +7,16 @@ import uuid
 import os
 from dotenv import load_dotenv
 from flask import Flask, abort, render_template, request, redirect, session, url_for, flash
-from sqlalchemy import Date, cast, func
+from numpy import extract
+import requests
+from sqlalchemy import Date, cast, distinct, func, desc, and_, extract, asc, text, literal_column
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql import column, expression
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from db_config import get_connection
 from flask_sqlalchemy import SQLAlchemy
 from itsdangerous import URLSafeTimedSerializer
+
 
 
 
@@ -86,6 +91,7 @@ class User(UserMixin, db.Model):
 
     # Use string here
     sessions = db.relationship('UserSession', backref='user', lazy=True)
+    schedules = db.relationship('TeachingSchedule', back_populates='teacher')
 
 
 class UserSession(db.Model):
@@ -110,18 +116,31 @@ class AdminActionLog(db.Model):
     action = db.Column(db.String(50), nullable=False)  # e.g., 'disable_user'
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     note = db.Column(db.Text)
+    
+class TeachingSchedule(db.Model):
+    __tablename__ = 'teaching_schedule'
+
+    id = db.Column(db.Integer, primary_key=True)
+    class_name = db.Column("class", db.String(50), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    starttime = db.Column(db.Time, nullable=False)
+    endtime = db.Column(db.Time, nullable=False)
+    school = db.Column(db.String(50), nullable=False)
+    rate = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
+    paid = db.Column(db.String(3), nullable=False, default='no')
+
+    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    teacher = db.relationship('User', back_populates='schedules')
       
 def get_user(field, value):
-    conn =  get_connection()
-    cursor = conn.cursor()
-    cursor.execute(f"SELECT id, username, email, password_hash, user_type, currency FROM users  WHERE {field} = %s", (value,))
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        user = User()
-        user.id, user.username, user.email, user.password_hash, user.user_type, user.currency = row
-        return user
-    return None
+    if field not in {'id', 'username', 'email'}:
+        raise ValueError("Invalid field for user lookup.")
+
+    # Get the column dynamically from the model
+    column = getattr(User, field)
+
+    # Query the user
+    return db.session.query(User).filter(column == value).first()
 
 def admin_required(f):
     @wraps(f)
@@ -137,12 +156,6 @@ def get_user_by_email(email):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id)) 
-        
-def format_timedelta_to_time_str(tdelta):
-    total_seconds = int(tdelta.total_seconds())
-    hours = total_seconds // 3600
-    minutes = (total_seconds % 3600) // 60
-    return f"{hours:02}:{minutes:02}"
 
 def send_email(to, subject, html_body):
     msg = Message(
@@ -157,24 +170,55 @@ def send_email(to, subject, html_body):
         print(f"✅ Email sent to {to}")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
+
+
+def format_timedelta_to_time_str(value):
+    """Convert a timedelta to a formatted time string."""
+    return f"{value.hour:02d}:{value.minute:02d}"
         
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        
         email = request.form['email']
         password = request.form['password']
-        
         session_token = str(uuid.uuid4())
-        ip = request.remote_addr
         user_agent = request.user_agent.string
-
         user = get_user_by_email(email)
-
-        # Generate session meta
-        session_token = str(uuid.uuid4())
-        ip = request.remote_addr
-        user_agent = request.user_agent.string
         now = datetime.now(UTC)
+        ip = request.remote_addr
+                
+        recaptcha_token = request.form.get('recaptcha_token')
+        secret = os.getenv('RECAPTCHA_SECRET_KEY')
+        print(secret)
+
+        recaptcha_response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': secret,
+                'response': recaptcha_token
+            }
+        )
+        result = recaptcha_response.json()
+        print("reCAPTCHA result:", result)
+        
+        
+        if not result.get('success') or result.get('score', 0) < 0.5:
+            print("reCAPTCHA failed:", result)  # Optional logging
+            flash("reCAPTCHA verification failed. Are you a robot?")
+            session_entry = UserSession(
+                user_id=None, # type: ignore
+                ip_address=ip, # type: ignore
+                user_agent=user_agent, # type: ignore
+                session_token=None, # type: ignore
+                login_time=now, # type: ignore
+                status='invalid_captcha' # type: ignore
+            )
+            db.session.add(session_entry)
+            db.session.commit()
+            return redirect(url_for('login'))
+    
+        
 
         # 1. If user is None (invalid email)
         if not user:
@@ -209,8 +253,8 @@ def login():
         # 3. If user is not confirmed
         if not user.confirmed:
             # send confirmation email again
-            token = serializer.dumps(email, salt='email-confirm')
-            confirm_url = url_for('confirm_email', token=token, _external=True)
+            email_token = serializer.dumps(email, salt='email-confirm')
+            confirm_url = url_for('confirm_email', token=email_token, _external=True)
             html = render_template('emails/register_email.html', confirm_url=confirm_url)
             send_email(email, 'Confirm Your Email - SchedEye', html)
 
@@ -242,7 +286,38 @@ def login():
             user.login_attempts += 1
             if user.login_attempts >= 5:
                 user.disabled = True
+                 # Email to the admin
+                body = f"""A user account has been automatically disabled due to too many failed login attempts.
+
+                Username:
+                {user.username}
+
+                Email:
+                {user.email}
+
+                User ID:
+                {user.id}
+
+                Time (UTC):
+                {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
+
+                IP Address:
+                {request.remote_addr}
+                """
+
+                msg = Message(
+                    subject='User Account Disabled - SchedEye',
+                    sender=os.getenv('EMAIL_NOREPLY_USERNAME'),
+                    recipients=os.getenv('EMAIL_ADMIN_USERNAME'), # type: ignore
+                    body=body  # plain text body
+                )
+
+                mail.send(msg)
                 flash("Account disabled after too many failed login attempts.", "danger")
+                
+                #email to the user
+                html = render_template('emails/disabled.html')
+                send_email(user.email, "Your Account has been disabled - SchedEye", html)
             elif user.login_attempts == 4:
                 flash("Your account will be disabled after one more failed login attempt.", "warning")
             else:
@@ -283,15 +358,82 @@ def login():
         db.session.commit()
 
         session['session_token'] = session_token
+        session['search_date'] = date.today().isoformat()
+        session['show_tutorial'] = True
+        print(session['search_date'])
+        
         return redirect(url_for('dashboard'))
 
 
-    return render_template('login.html')
+    return render_template('login.html', recaptcha_site_key=os.getenv('RECAPTCHA_SITE_KEY'))
 
 
 @app.route('/')
 def home():
     return render_template('home.html')
+
+
+@app.route('/contact', methods=['GET', 'POST'])
+def contact():
+    if current_user.is_authenticated:
+        contact_email = current_user.email  # type: ignore
+    else:
+        contact_email = ''
+
+    if request.method == 'POST':
+        contact_email = request.form.get('email', '').strip()
+        message = request.form.get('message', '').strip()
+        topic = request.form.get('topic', '').strip()
+        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Optionally validate content here
+
+        # Flash success message
+        flash(f'Thank you for your message, {contact_email}! We will get back to you shortly.', 'success')
+
+        # Simulated delay (not recommended in production)
+        time.sleep(2) # type: ignore
+        
+        body_contact = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6;">
+            <h2>New Contact Form Submission</h2>
+            <p><strong>Email:</strong> {contact_email}</p>
+            <p><strong>Time (UTC):</strong> {timestamp}</p>
+            <p><strong>Topic:</strong><br>{topic}</p>
+            <p><strong>Message:</strong><br>{message}</p>
+        </body>
+        </html>"""
+        
+        
+        # Send email or log
+        send_email(
+            "admin@schedeye.com",
+            "New Contact Form Submission",
+            body_contact
+        )
+        
+        if get_user_by_email(contact_email):
+            user = get_user_by_email(contact_email)
+            html_body = render_template('emails/contact_email.html')
+            send_email(
+                user.email, # type: ignore
+                "New Contact Form Submission",
+                html_body
+            )
+
+        # Redirect to prevent form resubmission
+        return redirect(url_for('contact'))
+
+    return render_template('contact.html', email=contact_email)
+
+@app.route('/features')
+def features():
+    return render_template('features.html')
+
+@app.route('/about')
+def about():
+    return render_template('about.html')
 
 @app.route('/confirm/<token>')
 def confirm_email(token):
@@ -366,6 +508,43 @@ def register():
 
         # Save to DB
         db.session.add(new_user)
+        db.session.commit()
+        
+        # Create example classes for the new user
+        example_classes = [
+            TeachingSchedule(
+                class_name='Demo Class 1', # type: ignore
+                date=date.today(), # type: ignore
+                starttime=time(9, 0), # type: ignore
+                endtime=time(10, 0), # type: ignore
+                school='', # type: ignore
+                rate=0.00, # type: ignore
+                paid='no', # type: ignore
+                teacher_id=new_user.id # type: ignore
+            ),
+            TeachingSchedule(
+                class_name='Demo Class 2', # type: ignore
+                date=date.today(), # type: ignore
+                starttime=time(10, 30), # type: ignore
+                endtime=time(11, 30), # type: ignore
+                school='', # type: ignore
+                rate=0.00, # type: ignore
+                paid='no', # type: ignore
+                teacher_id=new_user.id # type: ignore
+            ),
+            TeachingSchedule(
+                class_name='Demo Class 3', # type: ignore 
+                date=date.today(), # type: ignore
+                starttime=time(13, 0), # type: ignore
+                endtime=time(14, 0), # type: ignore
+                school='', # type: ignore
+                rate=0.00, # type: ignore
+                paid='no', # type: ignore
+                teacher_id=new_user.id # type: ignore
+            )
+        ]
+
+        db.session.add_all(example_classes) 
         db.session.commit()
 
         flash('Registration successful! Please check your email to confirm your account.', 'info')
@@ -476,60 +655,143 @@ def reset_password(token):
 
     return render_template('reset_password.html', token=token)
 
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    conn = get_connection()
-    cursor = conn.cursor()
-    selected_date = request.args.get('selected_date')
+    if request.args.get('reset_search_date') == '1':
+        session['search_date'] = date.today().isoformat()  # Reset to today
+    if request.args.get('date_search_triggered') == '1':
+        selected_date = request.args.get('selected_date')
+        session['search_date'] = selected_date  # Store in session
+    else:
+        selected_date = session.get('search_date')
+    
+
+    print("Selected date from session:", selected_date)
+    print("search date is ",session.get('search_date'))
     
     if selected_date:
         selected_date_dt = datetime.strptime(selected_date, "%Y-%m-%d")
-
-        start_date = selected_date_dt - timedelta(
-            days=selected_date_dt.weekday())
-        
-        end_date = start_date + timedelta(days=6)
-
-    else:
-        selected_date_dt = datetime.now()
-
-        start_date = selected_date_dt - timedelta(days=selected_date_dt.weekday())
-
-        end_date = start_date + timedelta(days=6)
-        
-    cursor.execute("SELECT * FROM teaching_schedule WHERE teacher_id = %s", (current_user.id,))
     
-    query = """SELECT * FROM teaching_schedule 
-                WHERE date BETWEEN %s 
-                AND %s 
-                AND teacher_id = %s
-                ORDER BY date, starttime
-    """
-    cursor.execute(query, (start_date.date(), end_date.date(), current_user.id))
-    teaching_schedule_data = cursor.fetchall()
-    cursor.close()
-    
-    
+    start_date = selected_date_dt - timedelta(days=selected_date_dt.weekday())  # Monday
+    end_date = start_date + timedelta(days=6)  # Sunday
+
+    # SQLAlchemy query
+    teaching_schedule_data = (
+        TeachingSchedule.query
+        .filter(
+            and_(
+                TeachingSchedule.teacher_id == current_user.id,
+                TeachingSchedule.date.between(start_date.date(), end_date.date()) # type: ignore
+            )
+        )
+        .order_by(TeachingSchedule.date.asc(), TeachingSchedule.starttime.asc())
+        .all()
+    )
+
+    # Generate week dates
     week_dates = []
-    start_date2 = start_date
-    for i in range(7):  # 7 days, Monday to Sunday
+    for i in range(7):
+        current_day = start_date + timedelta(days=i)
         week_dates.append({
-            'day_name': start_date2.strftime('%A'),
-            'day_date': start_date2.strftime('%d.%m.%Y')
+            'day_name': current_day.strftime('%A'), # type: ignore
+            'day_date': current_day.strftime('%d.%m.%Y') # type: ignore
         })
-        start_date2 += timedelta(days=1)
-        
+
+    login_count = db.session.query(UserSession).filter_by(user_id=current_user.id).count()
+    show_tutorial = login_count < 3 and session.get('show_tutorial', False)
     
+    
+    feature_list = [
+    {
+        "title": "Update User Details",
+        "text": "You can easily update your username, password, and currency preferences. Just click your username at the top right and choose <strong>Settings</strong>.",
+        "gif": "update_user.gif",
+        "alt": "Update User Details GIF",
+        "keywords": "username password login details user account"
+    },
+    {
+        "title": "Adding a New Class",
+        "text": "To add a new class, click the <strong>Add Lesson</strong> button at the top, fill in the class name, date, time, and school information, then click <strong>Save</strong>.",
+        "gif": "add_lesson.gif",
+        "alt": "Add Class GIF",
+        "keywords": "add class schedule new lesson"
+    },
+    {
+        "title": "Edit Lesson",
+        "text": "You can edit your lessons without deleting them. Simply right-click on a lesson, select <strong>Edit</strong>, and update the details as needed.",
+        "gif": "edit_lesson.gif",
+        "alt": "Edit Lessons GIF",
+        "keywords": "edit class schedule modify lesson"
+    },
+    {
+        "title": "Update Payments",
+        "text": "Easily update the payment status for one or multiple lessons. Right-click on a lesson and choose <strong>Paid</strong> or <strong>Unpaid</strong>. You can also select multiple lessons at once to update them together.",
+        "gif": "paid_unpaid.gif",
+        "alt": "Update Payments GIF",
+        "keywords": "pay paid unpaid payments money"
+    },
+    {
+        "title": "Deleting Lessons",
+        "text": "Easily remove lessons from your schedule. Select the lessons you want to delete, then right-click and choose <strong>Delete</strong>. You can delete one or multiple lessons at once.",
+        "gif": "delete_lessons.gif",
+        "alt": "Delete Lessons GIF",
+        "keywords": "delete remove lessons schedule"
+    },
+    {
+        "title": "Duplicating Lessons",
+        "text": "Easily create copies of existing lessons. To duplicate a class, select it, right-click, and choose <strong>Duplicate</strong>. Then, pick the new date and time — your lesson will be copied instantly.",
+        "gif": "duplicate_single.gif",
+        "alt": "Duplicate Lessons GIF",
+        "keywords": "copy duplicate lessons"
+    },
+    {
+        "title": "Duplicating Weeks",
+        "text": "Easily copy an entire week of lessons. Select all the classes from the week, then choose the week you want to copy them to from the menu. All selected lessons will be duplicated to the new week without hassle.",
+        "gif": "duplicate_bundle.gif",
+        "alt": "Duplicate Weeks GIF",
+        "keywords": "copy duplicate week whole week lessons"
+    },
+    {
+        "title": "Lesson Details",
+        "text": "View detailed information for each lesson from the <strong>View</strong> menu. From there, you can also edit, duplicate, or delete lessons as needed.",
+        "gif": "details_lesson.gif",
+        "alt": "Lesson Details GIF",
+        "keywords": "view details lesson information"
+    },
+    {
+        "title": "Calculate Total Hours",
+        "text": "Quickly calculate the total hours for your lessons. Click <strong>Calculate</strong> at the top right to view your teaching hours by school, month, year, or overall.",
+        "gif": "calculate_hours.gif",
+        "alt": "Calculate Total Hours GIF",
+        "keywords": "Total hours calculate time"
+    },
+    {
+        "title": "Calculate Total Payments",
+        "text": "Quickly calculate your total payments. Click <strong>Calculate</strong> at the top right, then select <strong>Payments</strong>. You can view your salary, received payments, and pending amounts by school, class, month, or year.<br><br>You can also mark all lessons as <strong>Paid</strong> or <strong>Unpaid</strong> from this section without selecting them one by one.",
+        "gif": "Payments.gif",
+        "alt": "Calculate Total Payments GIF",
+        "keywords": "Total hours payment money salary calculate time"
+    }
+]
+
 
     return render_template('dashboard.html',
-                           teaching_schedule_data = teaching_schedule_data,
-                           week_dates = week_dates,
-                           start_date = start_date,
-                           end_date = end_date,
-                           selected_date = selected_date
-)
-    
+                           teaching_schedule_data=teaching_schedule_data,
+                           week_dates=week_dates,
+                           start_date=start_date,
+                           end_date=end_date,
+                           show_tutorial=show_tutorial,
+                           selected_date=selected_date,
+                           feature_list=feature_list,)
+
+@app.route('/mark_tutorial_seen', methods=['POST'])
+@login_required
+def mark_tutorial_seen():
+    session['show_tutorial'] = False
+    return '', 204
+
 @app.before_request
 def session_timeout():
     session.permanent = True
@@ -576,21 +838,21 @@ def toggle_paid():
 
     if not lesson_ids:
         return "No lesson IDs provided", 400
-    
-    conn = get_connection()
-    cursor = conn.cursor()
 
-    for cls_id in lesson_ids:
-        cursor.execute(
-            "UPDATE teaching_schedule SET paid = 'yes' WHERE id = %s AND teacher_id = %s",
-            (cls_id, current_user.id)
+    # Update using SQLAlchemy
+    updated = (
+        TeachingSchedule.query
+        .filter(
+            TeachingSchedule.id.in_(lesson_ids),
+            TeachingSchedule.teacher_id == current_user.id
         )
+        .update({'paid': 'yes'}, synchronize_session=False)
+    )
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+    db.session.commit()
 
-    return "Updated Paid", 200
+    return f"Updated {updated} lesson(s) as paid", 200
+
 
 @app.route('/toggle_unpaid', methods=['POST'])
 @login_required
@@ -602,44 +864,43 @@ def toggle_unpaid():
     if not lesson_ids:
         return "No lesson IDs provided", 400
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    for cls_id in lesson_ids:
-        cursor.execute(
-            "UPDATE teaching_schedule SET paid = 'no' WHERE id = %s AND teacher_id = %s",
-            (cls_id, current_user.id)
+    # Update using SQLAlchemy
+    updated = (
+        TeachingSchedule.query
+        .filter(
+            TeachingSchedule.id.in_(lesson_ids),
+            TeachingSchedule.teacher_id == current_user.id
         )
+        .update({'paid': 'no'}, synchronize_session=False)
+    )
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+    db.session.commit()
 
-    return "Updated Unpaid", 200
+    return f"Updated {updated} lesson(s) as unpaid", 200
+
+from datetime import datetime, timedelta
+
+
+
 
 @app.route('/edit/<int:lesson_id>', methods=['POST', 'GET'])
 @login_required
 def edit_lesson(lesson_id):
-    conn = get_connection()
-    cursor = conn.cursor()
+    # Fetch the lesson and ensure ownership
+    lesson = db.session.query(TeachingSchedule).filter(
+        TeachingSchedule.id == lesson_id,
+        TeachingSchedule.teacher_id == current_user.id
+    ).first()
+
+    if not lesson:
+        return redirect(url_for('dashboard'))
+
     if request.method == 'GET':
-        QUERY = """SELECT * FROM teaching_schedule 
-                    WHERE id = %s
-                    AND teacher_id = %s
-        """
-        cursor.execute(QUERY, (lesson_id, current_user.id))
-        lesson = cursor.fetchone()
-        lesson2 = []
+        starttime= format_timedelta_to_time_str(lesson.starttime)
+        endtime = format_timedelta_to_time_str(lesson.endtime)
         
-        for row in lesson:
-
-            if isinstance(row, timedelta):
-                lesson2.append(format_timedelta_to_time_str(row))
-            else:
-                lesson2.append(row)
-    
     elif request.method == 'POST':
-
+        # Get form values
         class_name = request.form['class_name']
         date_str = request.form['selected_date']
         start_time_str = request.form['start_time']
@@ -648,36 +909,44 @@ def edit_lesson(lesson_id):
         rate = request.form['rate']
         paid = request.form['paid']
 
-        # Convert to correct types
+        # Convert values
         class_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        start_time = list(map(int, start_time_str.split(':')))
-        end_time = list(map(int, end_time_str.split(':')))
+        start_hours, start_minutes = map(int, start_time_str.split(':'))
+        end_hours, end_minutes = map(int, end_time_str.split(':'))
 
-        start_time = timedelta(hours=start_time[0], minutes=start_time[1])
-        end_time = timedelta(hours=end_time[0], minutes=end_time[1])
+        # Update the lesson object
+        lesson.class_name = class_name
+        lesson.date = class_date
+        lesson.starttime = timedelta(hours=start_hours, minutes=start_minutes)
+        lesson.endtime = timedelta(hours=end_hours, minutes=end_minutes)
+        lesson.school = school
+        lesson.rate = rate
+        lesson.paid = paid
+        
+        session['search_date'] = lesson.date.isoformat()  # Store the date in session for consistency
 
-        query = """UPDATE teaching_schedule 
-                    SET class = %s, date = %s, starttime = %s, endtime = %s, school = %s, rate = %s, paid = %s
-                    WHERE id = %s AND teacher_id = %s
-        """
-        cursor.execute(query, (class_name, class_date, start_time, end_time, school, rate, paid, lesson_id, current_user.id))
-        conn.commit()
+        db.session.commit()
+        flash("Lesson updated successfully.", "success")
         return redirect(url_for('dashboard'))
-    
 
-    conn.commit()
-    cursor.close()
-    conn.close() 
-    return render_template('base_info.html',
-                           lesson_id=lesson_id,
-                           page_title='Edit Lesson', 
-                           lesson=lesson2,
-                           form_action = url_for('edit_lesson', lesson_id=lesson_id)
+    return render_template(
+        'base_info.html',
+        lesson_id=lesson_id,
+        page_title='Edit Lesson',
+        lesson=lesson,
+        starttime=starttime,
+        endtime=endtime,
+        form_action=url_for('edit_lesson', lesson_id=lesson_id)
     )
+
     
 @app.route('/add_lesson', methods=['POST', 'GET'])
 @login_required
 def add_lesson():
+    if request.method == 'GET':
+        lesson = None
+
+        
     if request.method == 'POST':
         class_name = request.form['class_name']
         date_str = request.form['selected_date']
@@ -694,24 +963,31 @@ def add_lesson():
 
         start_time = timedelta(hours=start_time[0], minutes=start_time[1])
         end_time = timedelta(hours=end_time[0], minutes=end_time[1])
-
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        query = """INSERT INTO teaching_schedule (class, date, starttime, endtime, school, rate, paid, teacher_id)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        """
-
-        cursor.execute(query, (class_name, class_date, start_time, end_time, school, rate, paid, current_user.id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        
+        # Update the lesson object
+        
+        lesson = TeachingSchedule()  # Create a new instance
+        # Set the attributes
+        lesson.class_name = class_name
+        lesson.date = class_date
+        lesson.starttime = start_time
+        lesson.endtime = end_time
+        lesson.school = school
+        lesson.rate = rate
+        lesson.paid = paid
+        lesson.teacher_id = current_user.id  # Set the teacher_id
+        # Save to the database
+        db.session.add(lesson)
+        db.session.commit()
+        
+        session['search_date'] = lesson.date.isoformat()  # Store the date in session for consistency
+        
         return redirect(url_for('dashboard'))
 
     return render_template('base_info.html',
                            lesson_id=None,
-                           page_title='Add Lesson', 
-                           lesson=None,
+                           page_title='Add Lesson',
+                           lesson = lesson,
                            form_action = url_for('add_lesson')
     )
     
@@ -724,19 +1000,14 @@ def toggle_delete_bulk():
     if not lesson_ids:
         return "No lesson IDs provided", 400
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
     for cls_id in lesson_ids:
-        cursor.execute(
-            "DELETE FROM teaching_schedule WHERE id = %s AND teacher_id = %s",
-            (cls_id, current_user.id)
-        )
+        db.session.query(TeachingSchedule).filter(
+            TeachingSchedule.id == cls_id,
+            TeachingSchedule.teacher_id == current_user.id
+        ).delete(synchronize_session=False)
 
-    conn.commit()
-    cursor.close()
-    conn.close()
-    
+    db.session.commit()
+
     return "Deleted", 200
 
 
@@ -746,23 +1017,21 @@ def toggle_delete_bulk():
 @app.route('/duplicate/<int:lesson_id>', methods=['GET','POST'])
 @login_required
 def duplicate_lesson(lesson_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    if request.method == 'GET':
-        QUERY = """SELECT * FROM teaching_schedule 
-                    WHERE id = %s
-                    AND teacher_id = %s
-        """
-        cursor.execute(QUERY, (lesson_id, current_user.id))
-        lesson = cursor.fetchone()
-        lesson2 = []
-        
-        for row in lesson:
 
-            if isinstance(row, timedelta):
-                lesson2.append(format_timedelta_to_time_str(row))
-            else:
-                lesson2.append(row)
+    if request.method == 'GET':
+        # Fetch the lesson to duplicate      
+        lesson = db.session.query(TeachingSchedule).filter(
+            TeachingSchedule.id == lesson_id,
+            TeachingSchedule.teacher_id == current_user.id
+        ).first()
+        
+        starttime = format_timedelta_to_time_str(lesson.starttime) # type: ignore
+        endtime = format_timedelta_to_time_str(lesson.endtime) # type: ignore
+        
+        
+        if not lesson:
+            return redirect(url_for('dashboard'))
+        
     elif request.method == 'POST':
         class_name = request.form['class_name']
         date_str = request.form['selected_date']
@@ -779,19 +1048,29 @@ def duplicate_lesson(lesson_id):
 
         start_time = timedelta(hours=start_time[0], minutes=start_time[1])
         end_time = timedelta(hours=end_time[0], minutes=end_time[1])
+        
+        lesson = TeachingSchedule()  # Create a new instance
+        # Set the attributes
+        lesson.class_name = class_name
+        lesson.date = class_date
+        lesson.starttime = start_time
+        lesson.endtime = end_time
+        lesson.school = school
+        lesson.rate = rate
+        lesson.paid = paid
+        lesson.teacher_id = current_user.id  # Set the teacher_id
 
-        query = """INSERT INTO teaching_schedule (class, date, starttime, endtime, school, rate, paid, teacher_id)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        """
+        db.session.add(lesson)
+        db.session.commit()
+        
+        session['search_date'] = lesson.date.isoformat()  # Store the date in session for consistency
 
-        cursor.execute(query, (class_name, class_date, start_time, end_time, school, rate, paid, current_user.id))
-        conn.commit()
-        cursor.close()
-        conn.close()
         return redirect(url_for('dashboard'))
 
     return render_template('base_info.html',
-                           lesson=lesson2,
+                           lesson=lesson,
+                           starttime=starttime,
+                           endtime=endtime,
                            lesson_id=lesson_id,
                            page_title='Duplicate the Lesson',
                            form_action = url_for('duplicate_lesson', lesson_id=lesson_id)
@@ -806,42 +1085,39 @@ def duplicate_bulk():
     copy_date = data.get('copy_date')  # e.g. '2025-06-01'
 
     copy_date_dt = datetime.strptime(copy_date, "%Y-%m-%d")
-    start_date = copy_date_dt - timedelta(days=copy_date_dt.weekday())
+    start_date = copy_date_dt - timedelta(days=copy_date_dt.weekday())  # Monday of that week
     end_date = start_date + timedelta(days=6)
 
     class_list = []
-    
-    for cls in lesson_ids:
-        query = """SELECT * FROM teaching_schedule
-                WHERE id = %s
-                AND teacher_id = %s
-                """
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute(query, (cls, current_user.id))
-        result = cursor.fetchone()
-        if result:
-            result = list(result)  # Convert tuple to list for modification
-            original_weekday = result[2].weekday()  # Assuming date is at index 2
-            new_date = start_date + timedelta(days=original_weekday)
-            
-            result[2] = new_date  # Update the date to the new date
-            class_list.append(result)
 
-    for row in class_list:
-        print("inserted row")
-        query = """INSERT INTO teaching_schedule (class, date, starttime, endtime, school, rate, paid, teacher_id)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """
-        cursor.execute(query, (row[1], row[2], row[3], row[4], row[5], row[6], "no", current_user.id))
-        conn.commit()
-
-    conn.commit()
-    cursor.close()
-    conn.close()
+    # Fetch all selected lessons
+    lessons = db.session.query(TeachingSchedule).filter(
+        TeachingSchedule.id.in_(lesson_ids),
+        TeachingSchedule.teacher_id == current_user.id
+    ).all()
     
+    session['search_date'] = copy_date  # Store the date in session for consistency
+
+    for lesson in lessons:
+        original_weekday = lesson.date.weekday()
+        new_date = start_date + timedelta(days=original_weekday)
+
+        # Create new lesson with updated date
+        new_lesson = TeachingSchedule(
+            class_name=lesson.class_name, # type: ignore
+            date=new_date, # type: ignore
+            starttime=lesson.starttime, # type: ignore
+            endtime=lesson.endtime, # type: ignore
+            school=lesson.school, # type: ignore
+            rate=lesson.rate, # type: ignore
+            paid="no",  # always set to unpaid # type: ignore
+            teacher_id=current_user.id   # type: ignore
+        )
+        db.session.add(new_lesson)
+
+    db.session.commit()
     return "Duplicate", 200
+
 
 def calculate_totals(data): 
     total_hours = 0
@@ -977,6 +1253,10 @@ def edit_user(user_id):
             )
             db.session.add(log)
             
+            html = render_template('emails/blocked.html')
+            send_email(
+                user.email, "Your Account has blocked - SchedEye", html)
+
         elif user.disabled != new_disabled:
             user.disabled = new_disabled
 
@@ -987,6 +1267,9 @@ def edit_user(user_id):
                 note=note_text or 'Changed from user edit page.' # type: ignore
             )
             db.session.add(log)
+            
+            html = render_template('emails/disabled.html')
+            send_email("admin@schedeye.com", "Your Account has been disabled - SchedEye", html)
 
         db.session.commit()
         flash('User updated successfully.', 'success')
@@ -1094,6 +1377,8 @@ def admin_sessions():
             s.duration = "Session failed due to account being disabled."
         elif s.status == 'blocked':
             s.duration = "Session failed due to account being blocked."
+        elif s.status == 'invalid_captcha':
+            s.duration = "Session failed due to invalid CAPTCHA."
         else:
             s.duration = "Session is active or expired."
 
@@ -1172,33 +1457,63 @@ def change_password():
 
     
 
-def get_unique_values(cursor, field_expr, filters, alias="value", table="teaching_schedule"):
-    where_clause = " AND ".join([f"{key} = %s" for key in filters.keys()])
-    query = f"SELECT DISTINCT {field_expr} AS {alias} FROM {table} WHERE {where_clause} ORDER BY {alias};"
-    cursor.execute(query, tuple(filters.values()))
-    return [row[0] for row in cursor.fetchall()]
+def get_unique_values_orm(session, model, field_expr, filters, alias="value"):
+    """
+    SQLAlchemy ORM version of get_unique_values.
 
-def get_totals(cursor, year, teacher_id, paid="yes", month=None, school=None):
-    conditions = ["YEAR(date) = %s", "teacher_id = %s", "paid = %s"]
-    params = [year, teacher_id, paid]
+    Args:
+        session: SQLAlchemy session (e.g. db.session)
+        model: SQLAlchemy model (e.g. TeachingSchedule)
+        field_expr: SQLAlchemy column expression (e.g. extract('year', model.date))
+        filters: dict of {column: value}, where column is either a string or model attribute
+        alias: alias for the selected field
+
+    Returns:
+        List of unique values ordered by the alias.
+    """
+
+    # Apply label (alias) to the field expression
+    labeled_field = field_expr.label(alias)
+
+    # Build base query
+    query = session.query(distinct(labeled_field))
+
+    # Apply filters
+    for key, value in filters.items():
+        col = getattr(model, key) if isinstance(key, str) else key
+        query = query.filter(col == value)
+
+    # Order by alias
+    query = query.order_by(asc(labeled_field))
+
+    return [row[0] for row in query.all()]
+
+def get_totals_orm(session, year, teacher_id, paid="yes", month=None, school=None):
+    # Use TIME_TO_SEC(endtime - starttime)/3600
+    duration_expr = (
+        func.time_to_sec(
+            func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+        ) / 3600
+    ).label("total_hour")
+
+    query = session.query(
+        TeachingSchedule.rate.label("rate_perhour"),
+        duration_expr
+    ).filter(
+        extract('year', TeachingSchedule.date) == year,
+        TeachingSchedule.teacher_id == teacher_id,
+        TeachingSchedule.paid == paid
+    )
 
     if month:
-        conditions.append("MONTH(date) = %s")
-        params.append(month)
+        query = query.filter(extract('month', TeachingSchedule.date) == month)
     if school:
-        conditions.append("school = %s")
-        params.append(school)
+        query = query.filter(TeachingSchedule.school == school)
 
-    where_clause = " AND ".join(conditions)
-    query = f"""
-        SELECT RATE as rate_perhour,
-               TIMESTAMPDIFF(MINUTE, CONCAT('2000-01-01 ',starttime), CONCAT('2000-01-01 ',endtime))/60 as total_hour
-        FROM teaching_schedule
-        WHERE {where_clause}
-        ORDER BY MONTH(date);
-    """
-    cursor.execute(query, tuple(params))
-    return calculate_totals(cursor.fetchall())
+    query = query.order_by(extract('month', TeachingSchedule.date))
+
+    results = query.all()
+    return calculate_totals(results)
 
 def get_month_names(month_nums, month_names_dict):
     return [month_names_dict.get(num, "Unknown") for num in month_nums]
@@ -1206,24 +1521,25 @@ def get_month_names(month_nums, month_names_dict):
 @app.route('/payments', methods=['GET', 'POST'])
 @login_required
 def payments():
-    conn = get_connection()
-    cursor = conn.cursor()
 
-    # Years data
-    cursor.execute("""
-        SELECT DISTINCT YEAR(date) AS year
-        FROM teaching_schedule
-        WHERE teacher_id = %s
-        ORDER BY year DESC
-    """, (current_user.id,))
-    years2 = [year[0] for year in cursor.fetchall()]
+    years2 = (
+        db.session.query(distinct(extract('year', TeachingSchedule.date)).label('year'))
+        .filter(TeachingSchedule.teacher_id == current_user.id)
+        .order_by(desc(extract('year', TeachingSchedule.date)))
+        .all()
+        )
 
-    cursor.execute("""
-        SELECT DISTINCT YEAR(date) AS year
-        FROM teaching_schedule
-        WHERE teacher_id = %s AND paid = 'no'
-    """, (current_user.id,))
-    years2_unpaid = [year[0] for year in cursor.fetchall()]
+    # Flatten the result
+    years2 = [year.year for year in years2]
+
+    years2_unpaid = (db.session.query(distinct(extract('year', TeachingSchedule.date)).label('year'))
+        .filter(TeachingSchedule.teacher_id == current_user.id, TeachingSchedule.paid == 'no')
+        .order_by(desc(extract('year', TeachingSchedule.date)))
+        .all()
+    )
+
+    # Flatten the list of tuples
+    years2_unpaid = [year.year for year in years2_unpaid]
 
     # Static and init vars
     month_names = {
@@ -1242,99 +1558,215 @@ def payments():
         selected_school = request.form.get('school')
 
         if selected_year:
-            months = get_unique_values(cursor, "MONTH(date)", {"YEAR(date)": selected_year, "teacher_id": current_user.id}, alias="month")
-            months2 = get_month_names(months, month_names) + ["ALL"]
+            # Get unique months for the selected year
+            months = get_unique_values_orm(
+                session=db.session,  # Fixed typo
+                model=TeachingSchedule,
+                field_expr=extract('month', TeachingSchedule.date),
+                filters={
+                    extract('year', TeachingSchedule.date): selected_year,
+                    TeachingSchedule.teacher_id: current_user.id
+                },
+                alias="month"
+            )
+            show_all_option = months and len(months) > 1
+            months2 = get_month_names(months, month_names) + (["ALL"] if show_all_option else [])
 
-            months_unpaid = get_unique_values(cursor, "MONTH(date)", {
-                "YEAR(date)": selected_year, "teacher_id": current_user.id, "paid": "no"
-            }, alias="month")
-            months2_unpaid = get_month_names(months_unpaid, month_names) + (["ALL"] if months_unpaid else [])
+            # Get unpaid months
+            months_unpaid = get_unique_values_orm(
+                session=db.session,
+                model=TeachingSchedule,
+                field_expr=extract('month', TeachingSchedule.date),
+                filters={
+                    extract('year', TeachingSchedule.date): selected_year,
+                    TeachingSchedule.teacher_id: current_user.id,
+                    TeachingSchedule.paid: 'no'
+                },
+                alias="month"
+            )
+            show_all_option = months_unpaid and len(months_unpaid) > 1
+            months2_unpaid = get_month_names(months_unpaid, month_names) + (["ALL"] if show_all_option else [])
 
-            yearly_total_hours, yearly_total_salary, _ = get_totals(cursor, selected_year, current_user.id)
-            yearly_total_hours_unpaid, yearly_total_salary_unpaid, _ = get_totals(cursor, selected_year, current_user.id, paid="no")
+
+            yearly_total_hours, yearly_total_salary, _ = get_totals_orm(
+                session=db.session,
+                year=selected_year,
+                teacher_id=current_user.id
+            )
+            yearly_total_hours_unpaid, yearly_total_salary_unpaid, _ = get_totals_orm(
+                session=db.session,
+                year=selected_year,
+                teacher_id=current_user.id,
+                paid="no"
+            )
 
         if selected_month:
             month_number = next((k for k, v in month_names.items() if v == selected_month), None)
-            filters = {"YEAR(date)": selected_year, "teacher_id": current_user.id}
-            if selected_month != "ALL":
-                filters["MONTH(date)"] = month_number
+            # Start with year and teacher
+            filters_month = {
+                extract('year', TeachingSchedule.date): selected_year,
+                TeachingSchedule.teacher_id: current_user.id
+            }
 
-            companies = get_unique_values(cursor, "school", filters, alias="school") + ["ALL"]
-            filters_unpaid = filters.copy()
-            filters_unpaid["paid"] = "no"
-            companies_unpaid = get_unique_values(cursor, "school", filters_unpaid, alias="school")
-            if companies_unpaid:
+            # Add month filter only if not "ALL"
+            if selected_month != "ALL":
+                filters_month[extract('month', TeachingSchedule.date)] = month_number
+
+            companies = get_unique_values_orm(
+                session=db.session,
+                model=TeachingSchedule,
+                field_expr=TeachingSchedule.school,
+                filters=filters_month,
+                alias="school"
+            ) 
+            
+            if len(companies) > 1:
+                companies.append("ALL")
+
+            filters_unpaid_month = filters_month.copy()
+            filters_unpaid_month[TeachingSchedule.paid] = "no"
+
+            companies_unpaid = get_unique_values_orm(
+                session=db.session,
+                model=TeachingSchedule,
+                field_expr=TeachingSchedule.school,
+                filters=filters_unpaid_month,
+                alias="school"
+            )
+            if companies_unpaid and len(companies_unpaid) > 1:
                 companies_unpaid.append("ALL")
 
-            monthly_total_hours, monthly_total_salary, _ = get_totals(cursor, selected_year, current_user.id, month=month_number)
-            monthly_total_hours_unpaid, monthly_total_salary_unpaid, _ = get_totals(cursor, selected_year, current_user.id, paid="no", month=month_number)
+            monthly_total_hours, monthly_total_salary, _ = get_totals_orm(
+                session=db.session,
+                year=selected_year,
+                teacher_id=current_user.id,
+                month=month_number if selected_month != "ALL" else None
+            )
+            print(monthly_total_hours, monthly_total_salary)
+            monthly_total_hours_unpaid, monthly_total_salary_unpaid, _ = get_totals_orm(
+                session=db.session,
+                year=selected_year,
+                teacher_id=current_user.id,
+                paid="no",
+                month=month_number if selected_month != "ALL" else None
+            )
+            print(monthly_total_hours_unpaid, monthly_total_salary_unpaid)
 
         if selected_company:
-            filters = {"YEAR(date)": selected_year, "teacher_id": current_user.id}
+            filters_company = {
+                extract('year', TeachingSchedule.date): selected_year,
+                TeachingSchedule.teacher_id: current_user.id
+            }
             if selected_month != "ALL":
-                filters["MONTH(date)"] = month_number
-            if selected_company != "ALL":
-                filters["school"] = selected_company
+                filters_company[extract('month', TeachingSchedule.date)] = month_number
 
-            schools = get_unique_values(cursor, "SUBSTRING(class,1,3)", filters, alias="class_prefix") + ["ALL"]
-            filters_unpaid = filters.copy()
-            filters_unpaid["paid"] = "no"
-            schools_unpaid = get_unique_values(cursor, "SUBSTRING(class,1,3)", filters_unpaid, alias="class_prefix")
-            if schools_unpaid:
-                schools_unpaid.append("ALL")
-            print(schools_unpaid)
+            if selected_company != "ALL":
+                filters_company[TeachingSchedule.school] = selected_company
+
+            schools = get_unique_values_orm(
+                session=db.session,
+                model=TeachingSchedule,
+                field_expr=func.substring(TeachingSchedule.class_name, 1, 3),
+                filters=filters_company,
+                alias="class_prefix"
+            ) 
             
-            company_total_hours, company_total_salary, _ = get_totals(
-                cursor,
-                selected_year,
-                current_user.id,
-                month=month_number
-                if selected_month != "ALL" else None,
-                school=None if selected_company == "ALL" else selected_company
-)
-            company_total_hours_unpaid, company_total_salary_unpaid, _ = get_totals(
-                cursor,
-                selected_year,
-                current_user.id,
-                paid="no",
-                month=month_number
-                if selected_month != "ALL" else None,
-                school=None if selected_company == "ALL" else selected_company
+            if len(schools) > 1:
+                schools.append("ALL")
+
+             
+            filters_unpaid_company = filters_company.copy()
+            filters_unpaid_company[TeachingSchedule.paid] = "no"
+
+
+            schools_unpaid = get_unique_values_orm(
+                session=db.session,
+                model=TeachingSchedule,
+                field_expr=func.substring(TeachingSchedule.class_name, 1, 3),
+                filters=filters_unpaid_company,
+                alias="class_prefix"
+            )
+
+           # Preprocess optional filters
+            month = month_number if selected_month != "ALL" else None
+            school = None if selected_company == "ALL" else selected_company
+
+            # Append "ALL" if there are unpaid schools
+            if schools_unpaid and len(schools_unpaid) > 1:
+                schools_unpaid.append("ALL")
+
+            # Paid totals
+            company_total_hours, company_total_salary, _ = get_totals_orm(
+                session=db.session,
+                year=selected_year,
+                teacher_id=current_user.id,
+                month=month,
+                school=school
+            )
+
+            # Unpaid totals
+            company_total_hours_unpaid, company_total_salary_unpaid, _ = get_totals_orm(
+                session=db.session,
+                year=selected_year,
+                teacher_id=current_user.id,
+                month=month,
+                school=school,
+                paid="no"
             )
         if selected_school:
-            filters = {"YEAR(date)": selected_year, "teacher_id": current_user.id}
-            if selected_month != "ALL":
-                filters["MONTH(date)"] = month_number
-            if selected_company != "ALL":
-                filters["school"] = selected_company
+            filters_school = {
+                extract('year', TeachingSchedule.date): selected_year,
+                TeachingSchedule.teacher_id: current_user.id
+            }
 
-            # Get totals using filters + custom WHERE condition for class prefix
-            conditions = [f"{key} = %s" for key in filters]
-            params = list(filters.values())
+            if selected_month != "ALL":
+                filters_school[extract('month', TeachingSchedule.date)] = month_number
+
+            if selected_company != "ALL":
+                filters_school[TeachingSchedule.school] = selected_company
+
+            # Paid query
+            query_paid = db.session.query(
+                TeachingSchedule.rate.label("rate_perhour"),
+                (
+                    func.time_to_sec(
+                        func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+                    ) / 3600
+                ).label("total_hour")
+            ).filter(TeachingSchedule.paid == "yes")
+
+            # Apply filters
+            for condition, value in filters_school.items():
+                query_paid = query_paid.filter(condition == value)
+
+            # Filter by class prefix if selected_school != "ALL"
+            if selected_school != "ALL":
+                query_paid = query_paid.filter(
+                    func.substring(TeachingSchedule.class_name, 1, 3) == selected_school
+                )
+
+            school_total_hours, school_total_salary, _ = calculate_totals(query_paid.all())
+
+            # Unpaid query
+            query_unpaid = db.session.query(
+                TeachingSchedule.rate.label("rate_perhour"),
+                (
+                    func.time_to_sec(
+                        func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+                    ) / 3600
+                ).label("total_hour")
+            ).filter(TeachingSchedule.paid == "no")
+
+            # Apply filters
+            for condition, value in filters_school.items():
+                query_unpaid = query_unpaid.filter(condition == value)
 
             if selected_school != "ALL":
-                conditions.append("SUBSTRING(class,1,3) = %s")
-                params.append(selected_school)
+                query_unpaid = query_unpaid.filter(
+                    func.substring(TeachingSchedule.class_name, 1, 3) == selected_school
+                )
 
-            where_clause = " AND ".join(conditions)
-
-            query_paid = f"""
-                SELECT RATE as rate_perhour,
-                    TIMESTAMPDIFF(MINUTE, CONCAT('2000-01-01 ',starttime), CONCAT('2000-01-01 ',endtime))/60 as total_hour
-                FROM teaching_schedule
-                WHERE {where_clause} AND paid = 'yes';
-            """
-            cursor.execute(query_paid, tuple(params))
-            school_total_hours, school_total_salary, _ = calculate_totals(cursor.fetchall())
-
-            query_unpaid = f"""
-                SELECT RATE as rate_perhour,
-                    TIMESTAMPDIFF(MINUTE, CONCAT('2000-01-01 ',starttime), CONCAT('2000-01-01 ',endtime))/60 as total_hour
-                FROM teaching_schedule
-                WHERE {where_clause} AND paid = 'no';
-            """
-            cursor.execute(query_unpaid, tuple(params))
-            school_total_hours_unpaid, school_total_salary_unpaid, _ = calculate_totals(cursor.fetchall())
+            school_total_hours_unpaid, school_total_salary_unpaid, _ = calculate_totals(query_unpaid.all())
             
     if request.form.get('action') == 'paid':
         selected_year = request.form.get('year')
@@ -1348,32 +1780,28 @@ def payments():
             9: 'September', 10: 'October', 11: 'November', 12: 'December'
         }
 
-        update_query = ""
-        params = []
-
         if selected_year and selected_month:
-            update_query = "UPDATE teaching_schedule SET paid = 'yes' WHERE YEAR(date) = %s"
-            params = [int(selected_year)]
+            conditions = [
+                extract('year', TeachingSchedule.date) == int(selected_year),
+                TeachingSchedule.teacher_id == current_user.id
+            ]
 
             if selected_month != "ALL":
                 month_number = next((k for k, v in month_names.items() if v == selected_month), None)
-                update_query += " AND MONTH(date) = %s"
-                params.append(month_number) # type: ignore
-
-            update_query += " AND teacher_id = %s"
-            params.append(current_user.id)
+                conditions.append(extract('month', TeachingSchedule.date) == month_number)
 
             if selected_company and selected_company != "ALL":
-                update_query += " AND school = %s"
-                params.append(selected_company) # type: ignore
+                conditions.append(TeachingSchedule.school == selected_company)
 
             if selected_school and selected_school != "ALL":
-                update_query += " AND SUBSTRING(class,1,3) = %s"
-                params.append(selected_school) # type: ignore
+                conditions.append(func.substring(TeachingSchedule.class_name, 1, 3) == selected_school)
 
-            cursor.execute(update_query, tuple(params))
-            conn.commit()
-            flash("Marked as paid successfully.", "success")
+            # Perform the update
+            db.session.query(TeachingSchedule)\
+                .filter(and_(*conditions))\
+                .update({TeachingSchedule.paid: 'yes'}, synchronize_session=False)
+
+            db.session.commit()
             return redirect(url_for('payments'))
         
     if request.form.get('action') == 'unpaid':
@@ -1388,38 +1816,30 @@ def payments():
             9: 'September', 10: 'October', 11: 'November', 12: 'December'
         }
 
-        update_query = ""
-        params = []
-
         if selected_year and selected_month:
-            update_query = "UPDATE teaching_schedule SET paid = 'no' WHERE YEAR(date) = %s"
-            params = [int(selected_year)]
+            conditions = [
+                extract('year', TeachingSchedule.date) == int(selected_year),
+                TeachingSchedule.teacher_id == current_user.id
+            ]
 
             if selected_month != "ALL":
                 month_number = next((k for k, v in month_names.items() if v == selected_month), None)
-                update_query += " AND MONTH(date) = %s"
-                params.append(month_number) # type: ignore
-
-            update_query += " AND teacher_id = %s"
-            params.append(current_user.id)
+                conditions.append(extract('month', TeachingSchedule.date) == month_number)
 
             if selected_company and selected_company != "ALL":
-                update_query += " AND school = %s"
-                params.append(selected_company) # type: ignore
+                conditions.append(TeachingSchedule.school == selected_company)
 
             if selected_school and selected_school != "ALL":
-                update_query += " AND SUBSTRING(class,1,3) = %s"
-                params.append(selected_school) # type: ignore
+                conditions.append(func.substring(TeachingSchedule.class_name, 1, 3) == selected_school)
 
-            cursor.execute(update_query, tuple(params))
-            conn.commit()
-            flash("Marked as unpaid successfully.", "warning")
+            # Perform the update
+            db.session.query(TeachingSchedule)\
+                .filter(and_(*conditions))\
+                .update({TeachingSchedule.paid: 'no'}, synchronize_session=False)
+
+            db.session.commit()
             return redirect(url_for('payments'))
-
-
         
-
-
     return render_template('payments.html',
         page_title='Payments',
         years2=years2,
@@ -1447,15 +1867,18 @@ def payments():
 @app.route('/calculate_hours', methods=['GET', 'POST'])
 @login_required
 def calculate_hours():
-    conn = get_connection()
-    cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT DISTINCT YEAR(date) FROM teaching_schedule
-        WHERE teacher_id = %s
-        ORDER BY YEAR(date) DESC
-    """, (current_user.id,))
-    years2 = [year[0] for year in cursor.fetchall()]
+    years = db. session.query(
+        distinct(extract('year', TeachingSchedule.date)).label('year')
+    ).filter(
+        TeachingSchedule.teacher_id == current_user.id
+    ).order_by(
+        desc(extract('year', TeachingSchedule.date))
+    ).all()
+    
+    # Flatten the result
+    years2 = [year.year for year in years]
+
 
     month_names = {
         1: 'January', 2: 'February', 3: 'March', 4: 'April',
@@ -1475,63 +1898,111 @@ def calculate_hours():
         selected_month2 = next((k for k, v in month_names.items() if v == selected_month), None)
 
         if selected_year:
-            cursor.execute("""
-                SELECT DISTINCT MONTH(date) FROM teaching_schedule
-                WHERE YEAR(date) = %s AND teacher_id = %s
-                ORDER BY MONTH(date)
-            """, (selected_year, current_user.id))
-            months2 = [month_names.get(month[0], 'Unknown') for month in cursor.fetchall()]
+            
+            months = db.session.query(
+                distinct(extract('month', TeachingSchedule.date)).label('month')
+            ).filter(
+                extract('year', TeachingSchedule.date) == selected_year,
+                TeachingSchedule.teacher_id == current_user.id
+            ).order_by(
+                extract('month', TeachingSchedule.date)
+            ).all()
+            
+            months2 = [month_names.get(month.month, 'Unknown') for month in months]
+            print(months2)
 
         if selected_month:
-            cursor.execute("""
-                SELECT DISTINCT school FROM teaching_schedule
-                WHERE MONTH(date) = %s AND YEAR(date) = %s AND teacher_id = %s
-                ORDER BY school
-            """, (selected_month2, selected_year, current_user.id))
-            companies = [row[0] for row in cursor.fetchall()] + ["ALL"]
+            
+            company = db.session.query(
+                distinct(TeachingSchedule.school).label('school')
+            ).filter(
+                extract('year', TeachingSchedule.date) == selected_year,
+                extract('month', TeachingSchedule.date) == selected_month2,
+                TeachingSchedule.teacher_id == current_user.id
+            ).order_by(
+                TeachingSchedule.school
+            ).all()
+            
+            companies = [row.school for row in company]
+            if len(companies) > 1:
+                companies.append("ALL")
 
         if selected_company:
+            filter_conditions = [
+                    extract('year', TeachingSchedule.date) == selected_year,
+                    extract('month', TeachingSchedule.date) == selected_month2,
+                    TeachingSchedule.teacher_id == current_user.id
+                ]
             if selected_company == "ALL":
-                cursor.execute("""
-                    SELECT DISTINCT SUBSTRING(class,1,3) as class_prefix FROM teaching_schedule
-                    WHERE MONTH(date) = %s AND YEAR(date) = %s AND teacher_id = %s
-                """, (selected_month2, selected_year, current_user.id))
+                school = db.session.query(
+                    distinct(func.substring(TeachingSchedule.class_name, 1, 3)).label('class_prefix')
+                ).filter(*filter_conditions).order_by(
+                    func.substring(TeachingSchedule.class_name, 1, 3)
+                ).all()
+                
             else:
-                cursor.execute("""
-                    SELECT DISTINCT SUBSTRING(class,1,3) as class_prefix FROM teaching_schedule
-                    WHERE MONTH(date) = %s AND school = %s AND YEAR(date) = %s AND teacher_id = %s
-                """, (selected_month2, selected_company, selected_year, current_user.id))
-            schools = [row[0] for row in cursor.fetchall()] + ["ALL"]
+                filter_conditions.append(TeachingSchedule.school == selected_company)
+                
+                school = db.session.query(
+                    distinct(func.substring(TeachingSchedule.class_name, 1, 3)).label('class_prefix')
+                ).filter(
+                    *filter_conditions
+                ).order_by(
+                    func.substring(TeachingSchedule.class_name, 1, 3)
+                ).all()
+            
+            schools = [row[0] for row in school]
+            if len(schools) > 1:
+                schools.append("ALL")
 
         if request.form.get('action') == 'calculate':
-            base_query = """
-                FROM teaching_schedule
-                WHERE MONTH(date) = %s AND YEAR(date) = %s AND teacher_id = %s
-            """
-            query_params = [selected_month2, selected_year, current_user.id]
+    
+            filter_conditions = [
+                extract('year', TeachingSchedule.date) == selected_year,
+                extract('month', TeachingSchedule.date) == selected_month2,
+                TeachingSchedule.teacher_id == current_user.id
+            ]
 
-            if selected_company != "ALL":
-                base_query += " AND school = %s"
-                query_params.append(selected_company)
+            if selected_company and selected_company != "ALL":
+                filter_conditions.append(TeachingSchedule.school == selected_company)
 
-            if selected_school != "ALL":
-                base_query += " AND SUBSTRING(class,1,3) = %s"
-                query_params.append(selected_school)
+            if selected_school and selected_school != "ALL":
+                filter_conditions.append(
+                    func.substring(TeachingSchedule.class_name, 1, 3) == selected_school
+                )
 
-            cursor.execute(f"SELECT SUM(TIMESTAMPDIFF(MINUTE, CONCAT('2000-01-01 ',starttime), CONCAT('2000-01-01 ',endtime))) AS total_minutes {base_query}", query_params)
-            total_minutes = cursor.fetchone()[0] or 0
+            # Total minutes (using TIME_TO_SEC(TIMEDIFF(...)) / 60)
+            total_minutes = db.session.query(
+                func.sum(
+                    func.time_to_sec(
+                        func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+                    ) / 60
+                ).label('total_minutes')
+            ).filter(*filter_conditions).scalar() or 0
+
+            print(f"Total minutes: {total_minutes}")
+
             total_hours = round(total_minutes / 60, 2)
+            
+            print(f"Total hours: {total_hours}")
 
-            cursor.execute(f"""
-                SELECT RATE as rate_perhour,
-                       TIMESTAMPDIFF(MINUTE, CONCAT('2000-01-01 ',starttime), CONCAT('2000-01-01 ',endtime))/60 as total_hour
-                {base_query}
-            """, query_params)
-            result2 = cursor.fetchall()
+            # Get rate + total hours
+            result2 = db.session.query(
+                TeachingSchedule.rate.label("rate_perhour"),
+                (
+                    func.time_to_sec(
+                        func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+                    ) / 3600
+                ).label("total_hour")
+            ).filter(*filter_conditions).all()
+
             total_salary = round(sum(rate * hours for rate, hours in result2), 0)
 
-            cursor.execute(f"SELECT AVG(RATE) as avg_rate {base_query}", query_params)
-            avg_rate = cursor.fetchone()[0] or 0
+            # Average rate
+            avg_rate = db.session.query(
+                func.avg(TeachingSchedule.rate)
+            ).filter(*filter_conditions).scalar() or 0
+
             hourly_rate = round(avg_rate, 0)
 
             summary_result = {
@@ -1540,8 +2011,6 @@ def calculate_hours():
                 'total_salary': f"{int(total_salary):,}".replace(",", ".") + current_user.currency
             }
 
-            cursor.close()
-            conn.close()
 
     return render_template('calculate_hours.html',
         page_title='Calculate Hours',
@@ -1558,16 +2027,16 @@ def calculate_hours():
 
 
         
-@app.route('/test_register_email')
+@app.route('/test_register_email') # type: ignore
+
 def test_register_email():
-    dummy_email = 'ahmeddozdogan@gmail.com'  # Change this to your test address
-    token = serializer.dumps(dummy_email, salt='email-confirm')
-    confirm_url = url_for('confirm_email', token=token, _external=True)
+    send_email(
+            "admin@schedeye.com",
+            "New Contact Form Submission",
+            f"Email: {"deneme"}\nTopic: {"topic"}\nMessage: {"message"}"
+        )
 
-    html = render_template('emails/reset_password_email.html', reset_url=confirm_url)
-    send_email(dummy_email, 'Reset Your Password - SchedEye', html)
-
-    return "✅ Test reset password email sent!"
+    return "Email sent successfully!"
 
 
 if __name__ == '__main__':

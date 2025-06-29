@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}About SchedEye{% endblock %}
+
+{% block body %}
+<!-- Hero Banner -->
+<div class="position-relative mb-5">
+    <img src="{{ url_for('static', filename='images/about/teacher-banner.jpg') }}" class="img-fluid w-100"
+        style="max-height: 500px; object-fit: cover;" alt="Teacher Banner">
+
+    <div
+        class="position-absolute top-50 start-50 translate-middle text-white text-center bg-dark bg-opacity-50 p-4 rounded">
+        <h1 class="display-4 fw-bold">SchedEye</h1>
+        <p class="lead">Made by a teacher. Shared with the world.</p>
+    </div>
+</div>
+
+<!-- Why I Built It -->
+<div class="container py-4">
+    <div class="row align-items-center mb-5">
+        <div class="col-md-6 mb-4 mb-md-0">
+            <img src="{{ url_for('static', filename='images/about/messy-desk.jpg') }}" alt="Messy teacher desk"
+                class="img-fluid rounded shadow">
+        </div>
+        <div class="col-md-6">
+            <h2>Why I Built It</h2>
+            <p class="fs-5">
+                I’m an English teacher who got tired of juggling schedules, payments, and student info across messy
+                spreadsheets and random notes.
+                I built SchedEye to solve my own frustration — and realized it could help others too.
+            </p>
+            <p class="text-muted">SchedEye is a free, simple, and teacher-friendly solution for managing your classes
+                with peace of mind.</p>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="text-center mb-5">
+        <h3 class="mb-4">What Can You Do With SchedEye?</h3>
+    </div>
+
+    <div class="row text-center">
+        <div class="col-md-3 mb-4">
+            <div class="display-4 text-primary mb-2">
+                <i class="bi bi-calendar3"></i>
+            </div>
+            <h5>Plan Classes</h5>
+            <p class="text-muted">Organize your weekly and monthly schedule clearly and easily.</p>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="display-4 text-success mb-2">
+                <i class="bi bi-cash-coin"></i>
+            </div>
+            <h5>Track Payments</h5>
+            <p class="text-muted">See who paid, who didn’t, and stay in control financially.</p>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="display-4 text-warning mb-2">
+                <i class="bi bi-bell-fill"></i>
+            </div>
+            <h5>Get Reminders</h5>
+            <p class="text-muted">Receive alerts for unpaid sessions or upcoming lessons.</p>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="display-4 text-info mb-2">
+                <i class="bi bi-layout-text-window-reverse"></i>
+            </div>
+            <h5>Stay Organized</h5>
+            <p class="text-muted">A clean, modern interface made just for teachers.</p>
+        </div>
+    </div>
+
+    <!-- Call to Action -->
+    <div class="text-center mt-5">
+        <h4 class="mb-3">SchedEye is completely free to use.</h4>
+        <p class="text-muted">No ads. No subscriptions. Just something useful for teachers.</p>
+        <a href="/contact" class="btn btn-primary btn-lg mt-3">Send Feedback or Get in Touch</a>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}How to Use SchedEye{% endblock %}
+
+{% block body %}
+<div class="container py-5">
+    <h1 class="text-center mb-4">How to Use SchedEye</h1>
+    <p class="text-center text-muted mb-5">
+        Explore features, watch quick GIF demos, and learn how to get the most out of SchedEye.
+    </p>
+
+
+    <!-- Search Bar -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-8">
+            <input type="text" id="featureSearch" class="form-control form-control-lg"
+                placeholder="Search features, like 'payments' or 'add class'...">
+        </div>
+    </div>
+
+    <!-- Features List -->
+    <div id="featureList">
+
+        <!-- Example Feature -->
+        <div class="mb-5 feature-item" data-keywords="username password login details user account">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Update User Details</h5>
+                    <p class="card-text">
+                        You can easily update your username, password, and currency preferences. Just click your
+                        username at the top right and choose <strong>Settings</strong>.
+                    </p>
+                </div>
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/update_user.gif') }}" class="card-img-top"
+                    alt="Update User Details GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="add class schedule new lesson">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Adding a New Class</h5>
+                    <p class="card-text">
+                        To add a new class, click the <strong>Add Lesson</strong> button at the top, fill in the class
+                        name, date, time, and school information, then click <strong>Save</strong>.
+                    </p>
+                </div>
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/add_lesson.gif') }}" class="card-img-top"
+                    alt="Add Class GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="edit class schedule modify lesson">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Edit Lesson</h5>
+                    <p class="card-text">
+                        You can edit your lessons without deleting them. Simply right-click on a lesson, select
+                        <strong>Edit</strong>, and update the details as needed.
+                    </p>
+                </div>
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/edit_lesson.gif') }}" class="card-img-top"
+                    alt="Edit Lessons GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="pay paid unpaid payments money">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Update Payments</h5>
+                    <p class="card-text">
+                        Easily update the payment status for one or multiple lessons. Right-click on a lesson and choose
+                        <strong>Paid</strong> or <strong>Unpaid</strong>. You can also select multiple lessons at once
+                        to update them together.
+                    </p>
+                </div>
+                <hr class="m-0">
+
+                <img src="{{ url_for('static', filename='gifs/paid_unpaid.gif') }}" class="card-img-top"
+                    alt="Update Payments GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="delete remove lessons schedule">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Deleting Lessons</h5>
+                    <p class="card-text">
+                        Easily remove lessons from your schedule. Select the lessons you want to delete, then
+                        right-click and choose <strong>Delete</strong>. You can delete one or multiple lessons at once.
+                    </p>
+                </div>
+
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/delete_lessons.gif') }}" class="card-img-top"
+                    alt="Delete Lessons GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="copy duplicate lessons">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Duplicating Lessons</h5>
+                    <p class="card-text">
+                        Easily create copies of existing lessons. To duplicate a class, select it, right-click, and
+                        choose <strong>Duplicate</strong>. Then, pick the new date and time — your lesson will be copied
+                        instantly.
+                    </p>
+                </div>
+                <hr class="m-0">
+
+                <img src="{{ url_for('static', filename='gifs/duplicate_single.gif') }}" class="card-img-top"
+                    alt="Duplicate Lessons GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="copy duplicate week whole week lessons">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Duplicating Weeks</h5>
+                    <p class="card-text">
+                        Easily copy an entire week of lessons. Select all the classes from the week, then choose the
+                        week you want to copy them to from the menu. All selected lessons will be duplicated to the new
+                        week without hassle.
+                    </p>
+                </div>
+
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/duplicate_bundle.gif') }}" class="card-img-top"
+                    alt="Duplicate Weeks GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="view details lesson information">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Lesson Details</h5>
+                    <p class="card-text">
+                        View detailed information for each lesson from the <strong>View</strong> menu. From there, you
+                        can also edit, duplicate, or delete lessons as needed.
+                    </p>
+                </div>
+
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/details_lesson.gif') }}" class="card-img-top"
+                    alt="Lesson Details GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="Total hours calculate time">
+            <div class="card shadow h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Calculate Total Hours</h5>
+                    <p class="card-text">
+                        Quickly calculate the total hours for your lessons. Click <strong>Calculate</strong> at the top
+                        right to view your teaching hours by school, month, year, or overall.
+                    </p>
+                </div>
+
+                <hr class="m-0">
+                <img src="{{ url_for('static', filename='gifs/calculate_hours.gif') }}" class="card-img-top"
+                    alt="Calculate Total Hours GIF">
+            </div>
+        </div>
+
+        <div class="mb-5 feature-item" data-keywords="Total hours payment money salary calculate time">
+            <div class="card shadow h-100">
+                <<div class="card-body">
+                    <h5 class="card-title">Calculate Total Payments</h5>
+                    <p class="card-text">
+                        Quickly calculate your total payments. Click <strong>Calculate</strong> at the top right, then
+                        select <strong>Payments</strong>. You can view your salary, received payments, and pending
+                        amounts by school, class, month, or year.
+                        <br><br>
+                        You can also mark all lessons as <strong>Paid</strong> or <strong>Unpaid</strong> from this
+                        section without selecting them one by one.
+                    </p>
+            </div>
+
+            <hr class="m-0">
+            <img src="{{ url_for('static', filename='gifs/Payments.gif') }}" class="card-img-top"
+                alt="Calculate Total Payments GIF">
+        </div>
+    </div>
+
+
+    <!-- Add more feature cards below following the same structure -->
+
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const searchInput = document.getElementById("featureSearch");
+        const features = document.querySelectorAll(".feature-item");
+
+        searchInput.addEventListener("input", () => {
+            const query = searchInput.value.toLowerCase();
+            features.forEach(item => {
+                const keywords = item.getAttribute("data-keywords").toLowerCase();
+                const title = item.querySelector('.card-title')?.innerText.toLowerCase() || "";
+                const text = item.querySelector('.card-text')?.innerText.toLowerCase() || "";
+
+                const match = keywords.includes(query) || title.includes(query) || text.includes(query);
+                item.style.display = match ? "block" : "none";
+            });
+        });
+    });
+</script>
+{% endblock %}

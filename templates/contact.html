@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Contact Us{% endblock %}
+
+{% block body %}
+<div class="container-fluid p-0">
+    <div class="row g-0" style="min-height: 60vh;">
+        <!-- Background Image -->
+        <div class="col-12 position-relative">
+            <div class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-25"></div>
+            <div class="bg-image" style="
+                background-image: url('{{ url_for('static', filename='images/home/contact.jpg') }}');
+                background-size: contain; 
+                background-repeat: no-repeat; 
+                background-position: right center; 
+                height: 100vh;">
+                <div class="container h-100">
+                    <div class="row h-100 align-items-center">
+                        <div class="col-lg-6 col-md-8 col-sm-10 col-12 text-white z-1">
+                            <div class="bg-dark bg-opacity-50 p-5 rounded shadow-lg">
+                                <h2 class="text-center mb-4">Contact Us</h2>
+                                <p class="text-center text-light mb-4">
+                                    Got a question, suggestion, or issue? We'd love to hear from you.
+                                </p>
+
+                                {% with messages = get_flashed_messages(with_categories=true) %}
+                                {% if messages %}
+                                {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} text-center" role="alert">
+                                    {{ message }}
+                                </div>
+                                {% endfor %}
+                                {% endif %}
+                                {% endwith %}
+
+                                <form method="post" action="/contact" id="contactForm">
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label text-white">Email</label>
+                                        <input type="email" class="form-control" id="email" name="email"
+                                            pattern=".+@.+\.com" value="{{ email }}" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="topic" class="form-label text-white">Topic</label>
+                                        <select class="form-select" id="topic" name="topic" required>
+                                            <option value="" disabled selected>Select a topic</option>
+                                            <option value="recommendation">Make a Recommendation</option>
+                                            <option value="bug">Report a Bug</option>
+                                            <option value="question">Ask a Question</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="message" class="form-label text-white">Your Message</label>
+                                        <textarea class="form-control" id="message" name="message" rows="5"
+                                            required></textarea>
+                                    </div>
+                                    <div class="d-grid">
+                                        <button type="submit" class="btn btn-primary btn-lg"
+                                            id="submitButton">Submit</button>
+                                    </div>
+                                </form>
+
+                            </div>
+                        </div> <!-- /.col -->
+                    </div> <!-- /.row -->
+                </div> <!-- /.container -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('contactForm');
+        const button = document.getElementById('submitButton');
+
+        if (form && button) {
+            form.addEventListener('submit', function () {
+                button.disabled = true;
+                button.innerText = 'Sending...';
+            });
+        }
+    });
+</script>
+{% endblock %}

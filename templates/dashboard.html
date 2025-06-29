@@ -10,55 +10,79 @@
         font-weight: bold;
         border: 0px solid #f80000;
     }
-</style>
+
+    .tutorial-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.75);
+        z-index: 9999;
+    }
+
+    .tutorial-dialog {
+        max-width: 600px;
+        margin: 60px auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        position: relative;
+        z-index: 10000;
+    }
+
+    .tutorial-step img {
+        pointer-events: none;
+        max-height: 300px;
+        object-fit: contain;
+    }
 </style>
 {% endblock %}
 
 {% block navbar %}
-<div class="ms-auto d-flex align-items-center gap-3">
-
+<div class="ms-auto d-flex align-items-center gap-2">
     <!-- Calendar Search Form -->
     <form method="GET" action="{{ url_for('dashboard') }}" class="d-flex align-items-center gap-2 mb-0">
         <div class="align-self-center">
             <label for="selected_date" class="form-label fw-bold mb-0" style="width: 110px;">Select a date:</label>
         </div>
         <input type="date" id="selected_date" name="selected_date" class="form-control" style="max-width: 200px;"
-            required>
-        <button type="submit" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-calendar-event"></i> Search
+            value="{{ selected_date }}" required>
+
+        <input type="hidden" name="date_search_triggered" value="1">
+
+        <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-search"></i> Search
         </button>
+
+
     </form>
 
-    <!-- Edit Dropdown -->
+    <!-- Add a Lesson Button -->
+    <a href="{{ url_for('add_lesson') }}" class="btn btn-secondary btn-sm">
+        <i class="bi bi-calendar-event"></i> Add a Lesson
+    </a>
+
+    <!-- Calculate Dropdown -->
     <div class="btn-group">
         <button type="button" class="btn btn-success btn-sm dropdown-toggle" data-bs-toggle="dropdown"
             aria-expanded="false">
-            Edit
+            Calculate
         </button>
         <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('add_lesson') }}">Add A Lesson</a></li>
             <li><a class="dropdown-item" href="{{ url_for('payments') }}">Payments</a></li>
-            <li>
-                <hr class="dropdown-divider">
-            </li>
-            <li>
-                <a class="dropdown-item" href="{{ url_for('calculate_hours') }}">
-                    Calculate Hours
-                </a>
-            </li>
+            <li><a class="dropdown-item" href="{{ url_for('calculate_hours') }}">Calculate Hours</a></li>
         </ul>
     </div>
-
-
-
 </div>
+
 {% endblock %}
 
 
 
 
-{% block body %}
-<h1 class="text-center my-4 text-primary">
+{% block body %}<h1 class="text-center my-4 text-primary">
     Weekly Schedule ({{ start_date.strftime('%B %d') }} – {{ end_date.strftime('%B %d, %Y') }})
 </h1>
 
@@ -76,25 +100,23 @@
                 {% for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
                 <td class="bg-white">
                     {% for lesson in teaching_schedule_data %}
-                    {% set lesson_date = lesson[2] %}
-                    {% if lesson_date.strftime('%A') == day %}
+                    {% if lesson.date.strftime('%A') == day %}
 
-                    {% set start = lesson[3].total_seconds() | int %}
-                    {% set end = lesson[4].total_seconds() | int %}
+                    {% set start = lesson.starttime.hour * 3600 + lesson.starttime.minute * 60 %}
+                    {% set end = lesson.endtime.hour * 3600 + lesson.endtime.minute * 60 %}
 
                     <div class="lesson p-2 border rounded mb-2 text-start" style="background-color: #e7f1ff;"
-                        data-lesson-id="{{ lesson[0] }}">
-                        <strong>{{ lesson[1] }}</strong><br>
-                        <span class="text-muted">{{ lesson[5] }}</span><br>
+                        data-lesson-id="{{ lesson.id }}">
+                        <strong>{{ lesson.class_name }}</strong><br>
+                        <span class="text-muted">{{ lesson.school }}</span><br>
                         <small>
                             {{ "%02d:%02d" % (start // 3600, (start % 3600) // 60) }}
                             –
                             {{ "%02d:%02d" % (end // 3600, (end % 3600) // 60) }}
                         </small><br>
-                        <small>{{ lesson[6] }}
-                            {{ current_user.currency }}</small><br>
-                        <small class="{{ 'text-success' if lesson[7] == 'yes' else 'text-danger' }}">
-                            Paid: {{ 'Yes' if lesson[7] == 'yes' else 'No' }}
+                        <small>{{ lesson.rate }} {{ current_user.currency }}</small><br>
+                        <small class="{{ 'text-success' if lesson.paid == 'yes' else 'text-danger' }}">
+                            Paid: {{ 'Yes' if lesson.paid == 'yes' else 'No' }}
                         </small>
                     </div>
                     {% endif %}
@@ -104,8 +126,8 @@
             </tr>
         </tbody>
     </table>
-
 </div>
+
 
 <!-- Context Menu -->
 <div id="contextMenu" class="position-absolute bg-white border rounded shadow-sm p-2"
@@ -139,20 +161,37 @@
     </div>
 </div>
 
+
 <!-- Bulk Duplicate Modal -->
 <div class="modal fade" id="duplicateModal" tabindex="-1" aria-labelledby="duplicateModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="duplicateModalLabel">Duplicate Selected Lessons</h5>
+                <h5 class="modal-title" id="duplicateModalLabel">Duplicate Selected Lessons Into a New Week</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form id="duplicateForm">
-                    <label for="copyDate" class="form-label">Copy to Date:</label>
-                    <input type="date" id="copyDate" name="copy_date" class="form-control" required>
+                <form id="duplicateForm" class="p-2">
+
+                    <h4 class="fw-bold mb-3">📅 Please Select a Week</h4>
+
+                    <p class="text-secondary small mb-1">
+                        This tool copies the selected lessons into a new week.
+                    </p>
+                    <p class="text-secondary small mb-1">
+                        The selected lessons will be duplicated starting from Monday of the selected week. The classes
+                        will remain on the same day of the week as the original lessons.
+                    </p>
+                    <p class="text-secondary small mb-3">
+                        You can choose any day within that week.
+                    </p>
+
+                    <label for="copyDate" class="form-label fw-semibold">Copy to Date:</label>
+                    <input type="date" id="copyDate" name="copy_date" class="form-control mb-2" required>
+
                 </form>
             </div>
+
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button id="confirmDuplicateBtn" type="button" class="btn btn-primary">Duplicate</button>
@@ -161,8 +200,175 @@
     </div>
 </div>
 
+<!-- Loading Overlay -->
+<div id="loadingOverlay" style="display: none;">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+
+<style>
+    #loadingOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(255, 255, 255, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1055;
+        /* higher than Bootstrap modal (1050) */
+    }
+</style>
+
+<!-- Feature List for New Users -->
+{% if show_tutorial %}
+<div id="tutorialModal" class="tutorial-overlay"
+    style="display:block; position:fixed; top:0; left:0; width:100%; height:100%; background:#000000bb; z-index:9999;">
+    <div class="tutorial-dialog"
+        style="max-width:600px; margin:60px auto; background:#fff; padding:20px; border-radius:10px; position:relative;">
+
+        <div id="tutorialStepContainer">
+            <!-- Show each feature step-by-step -->
+            {% for feature in feature_list %}
+            <div class="tutorial-step" style="display:none;">
+                <div class="card shadow h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ feature.title }}</h5>
+                        <p class="card-text">{{ feature.text | safe }}</p>
+                    </div>
+                    <hr class="m-0">
+                    <img src="{{ url_for('static', filename='gifs/' + feature.gif) }}" class="card-img-top"
+                        alt="{{ feature.alt }}" style="pointer-events: none; max-height: 300px; object-fit: contain;">
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="d-flex justify-content-between mt-3">
+            <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+            <div>
+                <button class="btn btn-link me-2" onclick="skipTutorial()">Skip Tutorial</button>
+                <button class="btn btn-primary" onclick="nextStep()">Next</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endif %}
+
+
+
+<!-- Toast Container (bottom right corner) -->
+<div class="toast-container position-fixed bottom-0 end-0 p-4">
+    <div id="feedbackToast" class="toast bg-success text-white border-0" role="alert" aria-live="assertive"
+        aria-atomic="true">
+        <div class="d-flex align-items-center">
+            <div class="toast-body fs-5 fw-semibold px-3 py-2" id="toastMessage">
+                <!-- Dynamic message -->
+            </div>
+            <button type="button" class="btn-close btn-close-white me-3" data-bs-dismiss="toast"
+                aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Reusable Confirmation Modal -->
+<div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel"
+    aria-hidden="true">
+    <div class="tutorial-dialog modal-dialog-centered">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmationModalLabel">Please Confirm</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body" id="confirmationModalMessage">
+                Are you sure you want to proceed?
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button id="confirmationModalConfirmBtn" type="button" class="btn btn-primary">Confirm</button>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+
 
 <script>
+
+    function showToast(message, type = 'success') {
+        const toastEl = document.getElementById('feedbackToast');
+        const toastMsg = document.getElementById('toastMessage');
+
+        toastEl.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-info');
+        toastEl.classList.add(`bg-${type}`);
+        toastMsg.innerText = message;
+
+        const toast = new bootstrap.Toast(toastEl);
+        toast.show();
+    }
+
+    function showConfirmationModal({
+        title = "Please Confirm",
+        message = "Are you sure you want to proceed?",
+        confirmText = "Confirm",
+        confirmClass = "btn-primary",
+        onConfirm = () => { }
+    }) {
+        document.getElementById('confirmationModalLabel').textContent = title;
+        document.getElementById('confirmationModalMessage').textContent = message;
+
+        const confirmBtn = document.getElementById('confirmationModalConfirmBtn');
+        confirmBtn.textContent = confirmText;
+        confirmBtn.className = `btn ${confirmClass}`;
+
+        // Remove previous event listeners
+        const newBtn = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+
+        newBtn.addEventListener('click', () => {
+            bootstrap.Modal.getInstance(document.getElementById('confirmationModal')).hide();
+            onConfirm();
+        });
+
+        const modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+        modal.show();
+    }
+
+    document.getElementById('confirmDuplicateBtn').addEventListener('click', function () {
+        const button = this;
+        const form = document.getElementById('duplicateForm');
+
+        // Prevent repeated clicks
+        button.disabled = true;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Duplicating...`;
+
+        // Show overlay
+        document.getElementById('loadingOverlay').style.display = 'flex';
+
+        // Simulate your async operation (AJAX/fetch)
+        // Replace this setTimeout with your actual logic
+        setTimeout(() => {
+            // Example: close modal and reset
+            document.getElementById('loadingOverlay').style.display = 'none';
+            button.disabled = false;
+            button.innerHTML = 'Duplicate';
+            // Optionally close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('duplicateModal'));
+            modal.hide();
+        }, 2000);
+    });
+
     let selectedLessons = new Set();
 
     document.addEventListener('DOMContentLoaded', function () {
@@ -246,16 +452,20 @@
         // Handle duplicate confirmation
         document.getElementById("confirmDuplicateBtn").addEventListener("click", function () {
             const date = document.getElementById("copyDate").value;
+            const button = this;
+
             if (!date) {
-                alert("Please select a date.");
+                showToast("Please select a date.", "warning");
                 return;
             }
 
+            // Prevent multiple clicks
+            button.disabled = true;
+            button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Duplicating...`;
+
             fetch("/duplicate_bulk", {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     lesson_ids: Array.from(selectedLessons),
                     copy_date: date
@@ -263,15 +473,21 @@
             })
                 .then(res => {
                     if (res.ok) {
-                        alert("Lessons duplicated!");
-                        location.reload();
+                        showToast("Lessons duplicated!", "success");
+                        setTimeout(() => location.reload(), 1500);  // reload after short delay
                     } else {
-                        alert("Something went wrong.");
+                        showToast("Something went wrong.", "danger");
+                        setTimeout(() => location.reload(), 1500);
                     }
                 })
-                .catch(() => alert("Request failed."));
+                .catch(() => {
+                    showToast("Request failed. Check your connection.", "danger");
+                })
+                .finally(() => {
+                    button.disabled = false;
+                    button.innerHTML = 'Duplicate';
+                });
         });
-
         // Toggle paid status for selected lessons
         document.getElementById("togglePaidOption").addEventListener("click", function () {
             if (selectedLessons.size > 0) {
@@ -284,16 +500,17 @@
                         lesson_ids: Array.from(selectedLessons)
                     })
                 })
-                    .then(response => {
-                        if (response.ok) {
-                            alert("Paid status updated for selected lessons!");
-                            location.reload();
+                    .then(res => {
+                        if (res.ok) {
+                            showToast("Lessons paid status updated!", "success");
+                            setTimeout(() => location.reload(), 1500);
                         } else {
-                            alert("Something went wrong while updating.");
+                            showToast("Something went wrong.", "danger");
+                            setTimeout(() => location.reload(), 1500);
                         }
                     })
                     .catch(() => {
-                        alert("Request failed.");
+                        showToast("Request failed.", "danger");
                     });
             }
         });
@@ -309,45 +526,58 @@
                         lesson_ids: Array.from(selectedLessons)
                     })
                 })
-                    .then(response => {
-                        if (response.ok) {
-                            alert("Paid status updated for selected lessons!");
-                            location.reload();
+                    .then(res => {
+                        if (res.ok) {
+                            showToast("Lessons paid status updated!", "success");
+                            setTimeout(() => location.reload(), 1500);
                         } else {
-                            alert("Something went wrong while updating.");
+                            showToast("Something went wrong.", "danger");
+                            setTimeout(() => location.reload(), 1500);
                         }
                     })
                     .catch(() => {
-                        alert("Request failed.");
+                        showToast("Request failed.", "danger");
                     });
             }
         });
 
 
         document.getElementById("toggleDeleteOption").addEventListener("click", function () {
-            if (selectedLessons.size > 0 && confirm("Are you sure you want to delete these classes?")) {
-                fetch("/toggle_delete", {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        lesson_ids: Array.from(selectedLessons)
-                    })
-                })
-                    .then(response => {
-                        if (response.ok) {
-                            alert("Classes successfully deleted!");
-                            location.reload();
-                        } else {
-                            alert("Something went wrong while deleting.");
-                        }
-                    })
-                    .catch(() => {
-                        alert("Request failed.");
-                    });
+            if (selectedLessons.size === 0) {
+                showToast("No lessons selected.", "warning");
+                return;
             }
+
+            showConfirmationModal({
+                title: "Delete Selected Lessons",
+                message: "Are you sure you want to delete these classes?",
+                confirmText: "Delete",
+                confirmClass: "btn-danger",
+                onConfirm: () => {
+                    fetch("/toggle_delete", {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            lesson_ids: Array.from(selectedLessons)
+                        })
+                    })
+                        .then(res => {
+                            if (res.ok) {
+                                showToast("Lessons successfully deleted!", "success");
+                            } else {
+                                showToast("Something went wrong while deleting lessons.", "danger");
+                            }
+                            setTimeout(() => location.reload(), 1500);
+                        })
+                        .catch(() => {
+                            showToast("Request failed.", "danger");
+                        });
+                }
+            });
         });
+
     });
     // Submit function to send selected IDs to backend
     function submitSelectedLessons() {
@@ -512,19 +742,29 @@
 
                 // Handle delete button
                 document.getElementById('deleteBtn').onclick = function () {
-                    if (confirm("Are you sure you want to delete this lesson?")) {
-                        fetch(`/toggle_delete/${selectedLessonId}`, {
-                            method: 'POST'
-                        }).then(response => {
-                            if (response.ok) {
-                                alert("Lesson deleted!");
-                                location.reload();
-                            } else {
-                                alert("Failed to delete.");
-                            }
-                        }).catch(() => alert("Request failed."));
-                    }
+                    showConfirmationModal({
+                        title: "Delete This Lesson",
+                        message: "Are you sure you want to delete this lesson?",
+                        confirmText: "Delete",
+                        confirmClass: "btn-danger",
+                        onConfirm: () => {
+                            fetch(`/toggle_delete/${selectedLessonId}`, {
+                                method: 'POST'
+                            }).then(res => {
+                                if (res.ok) {
+                                    showToast("Lesson deleted successfully!", "success");
+                                    setTimeout(() => location.reload(), 1500);
+                                } else {
+                                    showToast("Something went wrong while deleting.", "danger");
+                                    setTimeout(() => location.reload(), 1500);
+                                }
+                            }).catch(() => {
+                                showToast("Request failed.", "danger");
+                            });
+                        }
+                    });
                 };
+
 
                 // Show the modal
                 new bootstrap.Modal(document.getElementById('lessonDetailModal')).show();
@@ -533,5 +773,46 @@
 
     });
 
+    // Feature List function
+
+    let currentStep = 0;
+    let steps = [];
+
+    function showStep(index) {
+        steps.forEach((step, i) => {
+            step.style.display = (i === index) ? 'block' : 'none';
+        });
+    }
+
+    function nextStep() {
+        if (currentStep < steps.length - 1) {
+            currentStep++;
+            showStep(currentStep);
+        } else {
+            skipTutorial();
+        }
+    }
+
+    function prevStep() {
+        if (currentStep > 0) {
+            currentStep--;
+            showStep(currentStep);
+        }
+    }
+
+    function skipTutorial() {
+        const modal = document.getElementById('tutorialModal');
+        if (modal) modal.style.display = 'none';
+
+        // Disable for current session
+        fetch("/mark_tutorial_seen", { method: "POST" });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        steps = document.querySelectorAll('#tutorialStepContainer .tutorial-step');
+        if (steps.length > 0) {
+            showStep(0);
+        }
+    });
 </script>
 {% endblock %}

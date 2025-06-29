@@ -3,13 +3,64 @@
 
 {% block title %}SchedEye - Home{% endblock %}
 
-
 {% block body %}
-<div class="container text-center mt-5">
-    <h2 class="mb-3">What is SchedEye?</h2>
-    <p class="lead">
-        SchedEye is a simple yet powerful scheduling application that helps teachers and staff manage classes,
-        shifts, and time effortlessly. Track hours, monitor attendance, and stay organized — all in one place.
-    </p>
+<div class="container mt-5">
+
+    <!-- Tagline Header -->
+    <div class="text-center mb-5">
+        <h1 class="display-5 fw-bold">SchedEye: You Lead the Class. We’ll Handle the Details.</h1>
+        <p class="text-muted mt-2" style="font-size: 1.2rem;">
+            Smart scheduling and payment tracking — built just for teachers.
+        </p>
+    </div>
+
+    <!-- First Section: Intro and Image -->
+    <div class="row align-items-center mb-5">
+        <div class="col-md-7">
+            <h2 class="mb-3">Everything You Need, All in One Place</h2>
+            <p class="lead">
+                Teaching is already a full-time job. SchedEye helps you manage your schedule, track payments,
+                and stay organized — all with zero clutter and zero cost.
+            </p>
+            <ul style="font-size: 1.1rem;">
+                <li>✅ Schedule classes and track them easily</li>
+                <li>✅ Record payments and set up alerts</li>
+                <li>✅ View clear summaries of your weekly or monthly work</li>
+                <li>✅ Access from any device — anytime, anywhere</li>
+                <li>✅ Simple and intuitive — no training needed</li>
+                <li>✅ <strong>Free</strong> — no ads, no hidden fees</li>
+            </ul>
+        </div>
+        <div class="col-md-5 text-center">
+            <img src="{{ url_for('static', filename='images/home/tiredteacher.jpg') }}" alt="Tired Teacher"
+                class="img-fluid rounded shadow" style="max-height: 350px;">
+            <p class="text-muted mt-2">Still using Excel and sticky notes?</p>
+        </div>
+    </div>
+
+    <!-- Second Section: Benefits and Image -->
+    <div class="row align-items-center">
+        <div class="col-md-7 order-md-2">
+            <h3 class="mb-3">Made for Teachers Like You</h3>
+            <p class="lead">
+                Whether you're freelancing, tutoring, or teaching at a center — SchedEye is the digital assistant
+                that helps you stay in control without the stress.
+            </p>
+            <ul style="font-size: 1.1rem;">
+                <li>📅 Visual calendar with color-coded classes</li>
+                <li>💸 Payment tracking with due date alerts</li>
+                <li>🔔 Smart reminders for your day</li>
+                <li>📂 Easily access your student history and class logs</li>
+                <li>💻 Designed by teachers, for teachers</li>
+            </ul>
+            <p class="mt-3 text-success"><strong>And yes — it’s totally free.</strong></p>
+        </div>
+        <div class="col-md-5 text-center order-md-1">
+            <img src="{{ url_for('static', filename='images/home/happyteacher.jpg') }}" alt="Happy Teacher"
+                class="img-fluid rounded shadow" style="max-height: 350px;">
+            <p class="text-muted mt-2">Let SchedEye simplify your teaching life.</p>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
