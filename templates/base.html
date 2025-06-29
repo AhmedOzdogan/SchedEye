@@ -37,7 +37,8 @@
                 </div>
             </div>
 
-            <div class="d-flex align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                {% block navbar %}{% endblock %}
                 {% if request.endpoint == 'login' %}
                 <button class="btn btn-outline-primary btn-sm" disabled>Login</button>
                 <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm">Register</a>
@@ -50,7 +51,7 @@
                 <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-sm">Login</a>
                 <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm">Register</a>
 
-                {% else %}
+                {% elif request.endpoint != 'dashboard' %}
                 <div class="dropdown">
                     <button class="btn btn-dark btn-sm dropdown-toggle" type="button" id="userDropdown"
                         data-bs-toggle="dropdown" aria-expanded="false">

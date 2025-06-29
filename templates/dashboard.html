@@ -41,43 +41,71 @@
 {% endblock %}
 
 {% block navbar %}
-<div class="ms-auto d-flex align-items-center gap-2">
-    <!-- Calendar Search Form -->
-    <form method="GET" action="{{ url_for('dashboard') }}" class="d-flex align-items-center gap-2 mb-0">
-        <div class="align-self-center">
-            <label for="selected_date" class="form-label fw-bold mb-0" style="width: 110px;">Select a date:</label>
+<div class="container mt-4">
+    <div class="row gx-2 gy-2 align-items-center flex-wrap">
+
+        <!-- Date input and Search button inside same form -->
+        <div class="col-12 col-md-auto">
+            <form method="GET" action="{{ url_for('dashboard') }}"
+                class="d-flex flex-wrap align-items-center gap-2 mb-0">
+                <input type="date" id="selected_date" name="selected_date" class="form-control"
+                    value="{{ selected_date or '' }}" required>
+                <input type="hidden" name="date_search_triggered" value="1">
+
+            </form>
         </div>
-        <input type="date" id="selected_date" name="selected_date" class="form-control" style="max-width: 200px;"
-            value="{{ selected_date }}" required>
 
-        <input type="hidden" name="date_search_triggered" value="1">
+        <div class="col-12 col-md-auto">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-sm w-100 w-md-auto">
+                <i class="bi bi-search"></i> Search
+            </a>
+        </div>
 
-        <button type="submit" class="btn btn-primary btn-sm w-100">
-            <i class="bi bi-search"></i> Search
-        </button>
+        <!-- Add a Lesson button -->
+        <div class="col-12 col-md-auto">
+            <a href="{{ url_for('add_lesson') }}" class="btn btn-secondary btn-sm w-100 w-md-auto">
+                <i class="bi bi-calendar-event"></i> Add a Lesson
+            </a>
+        </div>
 
+        <!-- Calculate dropdown -->
+        <div class="col-12 col-md-auto">
+            <div class="btn-group w-100 w-md-auto">
+                <button type="button" class="btn btn-success btn-sm dropdown-toggle w-100 w-md-auto"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                    Calculate
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="{{ url_for('payments') }}">Payments</a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('calculate_hours') }}">Calculate Hours</a></li>
+                </ul>
+            </div>
+        </div>
 
-    </form>
+        <div class="col-12 col-md-auto">
+            <button class="btn btn-dark btn-sm dropdown-toggle w-100 w-md-auto" type="button" id="userDropdown"
+                data-bs-toggle="dropdown" aria-expanded="false">
+                {{ current_user.username }}
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                <li><a class="dropdown-item" href="{{ url_for('dashboard', reset_search_date=1) }}">Dashboard</a></li>
+                <li><a class="dropdown-item" href="{{ url_for('settings') }}">Settings</a></li>
+                {% if current_user.user_type == 'admin' %}
+                <li><a class="dropdown-item" href="{{ url_for('admin_home') }}">Admin</a></li>
+                {% endif %}
+                <li>
+                    <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">Logout</a></li>
+            </ul>
+        </div>
 
-    <!-- Add a Lesson Button -->
-    <a href="{{ url_for('add_lesson') }}" class="btn btn-secondary btn-sm">
-        <i class="bi bi-calendar-event"></i> Add a Lesson
-    </a>
-
-    <!-- Calculate Dropdown -->
-    <div class="btn-group">
-        <button type="button" class="btn btn-success btn-sm dropdown-toggle" data-bs-toggle="dropdown"
-            aria-expanded="false">
-            Calculate
-        </button>
-        <ul class="dropdown-menu">
-            <li><a class="dropdown-item" href="{{ url_for('payments') }}">Payments</a></li>
-            <li><a class="dropdown-item" href="{{ url_for('calculate_hours') }}">Calculate Hours</a></li>
-        </ul>
     </div>
 </div>
-
 {% endblock %}
+
+
+
 
 
 

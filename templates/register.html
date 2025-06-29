@@ -7,34 +7,39 @@
 {% endblock %}
 
 {% block body %}
-<div class="container d-flex flex-column align-items-center justify-content-center" style="height: 80vh;">
-    <img src="{{ url_for('static', filename='images/logo-schedeye.png') }}" alt="SchedEye Logo" class="img-fluid mb-4"
-        style="max-width: 250px;">
+<div class="container d-flex flex-column align-items-center justify-content-center py-5" style="min-height: 80vh;">
+    <!-- Hide logo on small screens -->
+    <img src="{{ url_for('static', filename='images/logo-schedeye.png') }}" alt="SchedEye Logo"
+        class="img-fluid mb-4 d-none d-md-block" style="max-width: 250px;">
 
-    <div class="col-md-4 bg-white p-4 rounded shadow">
+    <div class="col-12 col-sm-10 col-md-6 col-lg-4 bg-white p-4 rounded shadow">
         <h3 class="text-center mb-4">Register Here</h3>
 
         <form method="POST" action="/register">
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
-                <input type="username" class="form-control" id="username" name="username"
-                    placeholder="Choose a username" required>
+                <input type="text" class="form-control" id="username" name="username" placeholder="Choose a username"
+                    required>
             </div>
+
             <div class="mb-3">
                 <label for="email" class="form-label">Email address</label>
                 <input type="email" class="form-control" id="email" name="email" placeholder="you@example.com" required>
             </div>
+
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
                 <input type="password" class="form-control" id="password" name="password"
-                    placeholder="Min 8 chars, at least 1 special char and at least 1 number"
+                    placeholder="Min 8 chars, 1 special char, 1 number"
                     pattern="^(?=.*[0-9])(?=.*[!@#$%^&*.])[A-Za-z\d!@#$%^&*.]{8,}$" required>
             </div>
+
             <div class="mb-3">
                 <label for="password_again" class="form-label">Confirm Password</label>
                 <input type="password" class="form-control" id="password_again" name="password_again"
                     placeholder="Confirm your password" required>
             </div>
+
             <div class="mb-3">
                 <label for="currency" class="form-label">Currency</label>
                 <select class="form-select" id="currency" name="currency" required>
@@ -43,9 +48,11 @@
                     {% endfor %}
                 </select>
             </div>
+
             <div class="d-grid">
-                <button type="register" class="btn btn-primary">Register</button>
+                <button type="submit" class="btn btn-primary">Register</button>
             </div>
+
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
             {% for category, message in messages %}
