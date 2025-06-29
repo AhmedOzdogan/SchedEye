@@ -203,20 +203,20 @@ def login():
         print("reCAPTCHA result:", result)
         
         
-        if not result.get('success') or result.get('score', 0) < 0.5:
-            print("reCAPTCHA failed:", result)  # Optional logging
-            flash("reCAPTCHA verification failed. Are you a robot?")
-            session_entry = UserSession(
-                user_id=None, # type: ignore
-                ip_address=ip, # type: ignore
-                user_agent=user_agent, # type: ignore
-                session_token=None, # type: ignore
-                login_time=now, # type: ignore
-                status='invalid_captcha' # type: ignore
-            )
-            db.session.add(session_entry)
-            db.session.commit()
-            return redirect(url_for('login'))
+        # if not result.get('success') or result.get('score', 0) < 0.5:
+        #     print("reCAPTCHA failed:", result)  # Optional logging
+        #     flash("reCAPTCHA verification failed. Are you a robot?")
+        #     session_entry = UserSession(
+        #         user_id=None, # type: ignore
+        #         ip_address=ip, # type: ignore
+        #         user_agent=user_agent, # type: ignore
+        #         session_token=None, # type: ignore
+        #         login_time=now, # type: ignore
+        #         status='invalid_captcha' # type: ignore
+        #     )
+        #     db.session.add(session_entry)
+        #     db.session.commit()
+        #     return redirect(url_for('login'))
     
         
 
@@ -590,7 +590,6 @@ def forgot_password():
         return redirect(url_for('login'))
 
     return render_template('forgot_password.html')
-
 
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
