@@ -2,7 +2,10 @@
 
 SchedEye is a modern, mobile-friendly web application for managing teaching schedules, tracking payments, and viewing login history. Designed for freelance teachers or small institutes, it provides an efficient way to organize lessons, monitor activity, and streamline communication with schools and students.
 
-🔗 **Live Site:** [https://schedule.com](https://schedule.com)
+🔗 **Live Site:** [https:/schedeye.com](https://schedeye.com)
+🔐 **Demo Login:**  
+‣ Email: `ahmed_ozdogan@gmail.com`  
+‣ Password: `TeacherAhmed1`
 
 ---
 
