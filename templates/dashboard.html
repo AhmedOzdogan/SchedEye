@@ -189,7 +189,8 @@
                     {{ lesson.starttime.strftime("%H:%M") }} – {{ lesson.endtime.strftime("%H:%M") }}
                 </p>
                 <div class="lesson-menu-btn d-md-none text-end">
-                    <button class="btn btn-sm btn-light border" data-lesson-id="{{ lesson.id }}">⋮</button>
+                    <button type="button" class="btn btn-sm btn-light border"
+                        data-lesson-id="{{ lesson.id }}">⋮</button>
                 </div>
             </div>
         </div>
@@ -383,6 +384,7 @@
 
 
     let selectedLessons = new Set();
+    let selectedLessonId = null; // Declare it globally
 
     function showToast(message, type = 'success') {
         const toastEl = document.getElementById('feedbackToast');
@@ -474,22 +476,25 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         const menu = document.getElementById("contextMenu");
-        let selectedLessonId = null;
 
         // Show context menu on right-click of a lesson
         document.addEventListener("contextmenu", function (e) {
             const lessonBox = e.target.closest(".lesson");
 
             if (lessonBox) {
-                e.preventDefault();
+                e.preventDefault();      // Stops right-click menu
+                e.stopPropagation();     // Stops event bubbling
+
                 selectedLessonId = lessonBox.dataset.lessonId;
 
-                // Show menu near the cursor
+                const menu = document.getElementById("contextMenu");
+
+                // Position the menu
                 menu.style.left = `${e.pageX}px`;
                 menu.style.top = `${e.pageY}px`;
                 menu.style.display = "block";
             } else {
-                menu.style.display = "none";
+                document.getElementById("contextMenu").style.display = "none";
             }
         });
 
@@ -506,7 +511,7 @@
 
                 const menu = document.getElementById("contextMenu");
 
-                // 🔧 Step 1: Show the menu temporarily to measure size
+                // TEMPORARILY SHOW to get dimensions
                 menu.style.visibility = 'hidden';
                 menu.style.display = 'block';
                 menu.style.left = '0px';
@@ -514,31 +519,26 @@
 
                 const menuWidth = menu.offsetWidth;
                 const menuHeight = menu.offsetHeight;
-                const offsetX = 4;
-                const offsetY = 4;
+                const offsetX = 8;
+                const offsetY = 8;
 
-                // 🔧 Step 2: Check available space below
-                const spaceBelow = window.innerHeight - rect.bottom;
+                let top = rect.bottom + scrollTop + offsetY;
+                let left = rect.left + scrollLeft;
 
-                let top;
-                if (spaceBelow < menuHeight + offsetY) {
-                    // Not enough space below — open upward
-                    top = rect.top + scrollTop - menuHeight - offsetY;
-                } else {
-                    // Enough space — open downward
-                    top = rect.top + scrollTop;
+                // Keep menu within screen bounds
+                if (left + menuWidth > window.innerWidth) {
+                    left = window.innerWidth - menuWidth - 10;
                 }
 
-                // 🔧 Step 3: Align right edge of menu with button
-                menu.style.left = `${rect.right + scrollLeft - menuWidth - offsetX}px`;
+                if (top + menuHeight > window.innerHeight) {
+                    top = rect.top + scrollTop - menuHeight - offsetY;
+                }
+
+                menu.style.left = `${left}px`;
                 menu.style.top = `${top}px`;
                 menu.style.visibility = 'visible';
             });
         });
-
-
-
-
 
         // Only hide menu when clicking outside
         document.addEventListener("click", function (e) {
@@ -560,8 +560,8 @@
     });
 
     document.getElementById("editOption").addEventListener("click", function () {
-        if (window.selectedLessonId) {
-            window.location.href = `/edit/${window.selectedLessonId}`;
+        if (selectedLessonId) {
+            window.location.href = `/edit/${selectedLessonId}`;
         }
     });
 
@@ -620,6 +620,7 @@ Duplicating...`;
                 button.innerHTML = 'Duplicate';
             });
     });
+
     // Toggle paid status for selected lessons
     document.getElementById("togglePaidOption").addEventListener("click", function () {
         if (selectedLessons.size > 0) {
@@ -734,22 +735,21 @@ Duplicating...`;
     }
 
 
-    document.addEventListener("DOMContentLoaded", function () {
-        // Right-click: set selected lesson
-        document.querySelectorAll('.lesson').forEach(function (box) {
-            box.addEventListener('contextmenu', function (e) {
-                e.preventDefault();
-                selectedLessonId = this.dataset.lessonId;
-                console.log("Right-clicked lesson ID:", selectedLessonId);
+    document.querySelectorAll('.lesson').forEach(function (box) {
+        box.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
 
-                // Show your custom context menu if needed
-                const menu = document.getElementById("contextMenu");
-                if (menu) {
-                    menu.style.left = `${e.pageX}px`;
-                    menu.style.top = `${e.pageY}px`;
-                    menu.style.display = "block";
-                }
-            });
+            selectedLessonId = this.dataset.lessonId;
+            console.log("Right-clicked lesson ID:", selectedLessonId);
+
+            // Show your custom context menu
+            const menu = document.getElementById("contextMenu");
+            if (menu) {
+                menu.style.left = `${e.pageX}px`;
+                menu.style.top = `${e.pageY}px`;
+                menu.style.display = "block";
+            }
         });
 
         document.addEventListener("click", function (e) {
@@ -910,10 +910,10 @@ Duplicating...`;
         if (currentStep < steps.length - 1) { currentStep++; showStep(currentStep); } else { skipTutorial(); }
     } function
         prevStep() {
-            if (currentStep > 0) {
-                currentStep--;
-                showStep(currentStep);
-            }
+        if (currentStep > 0) {
+            currentStep--;
+            showStep(currentStep);
+        }
     }
 
     function skipTutorial() {
