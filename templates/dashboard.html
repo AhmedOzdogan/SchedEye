@@ -381,6 +381,9 @@
 
 <script>
 
+
+    let selectedLessons = new Set();
+
     function showToast(message, type = 'success') {
         const toastEl = document.getElementById('feedbackToast');
         const toastMsg = document.getElementById('toastMessage');
@@ -444,7 +447,6 @@
         }, 2000);
     });
 
-    let selectedLessons = new Set();
 
     document.addEventListener('DOMContentLoaded', function () {
         document.querySelectorAll('.lesson').forEach(function (box) {
@@ -556,10 +558,13 @@
         }
 
     });
-    // Edit action
+
     document.getElementById("editOption").addEventListener("click", function () {
-        goToAction("edit");
+        if (window.selectedLessonId) {
+            window.location.href = `/edit/${window.selectedLessonId}`;
+        }
     });
+
 
     // Duplicate action
     document.getElementById("duplicateOption").addEventListener("click", function () {
@@ -587,7 +592,8 @@
 
         // Prevent multiple clicks
         button.disabled = true;
-        button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Duplicating...`;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+Duplicating...`;
 
         fetch("/duplicate_bulk", {
             method: 'POST',
@@ -600,7 +606,7 @@
             .then(res => {
                 if (res.ok) {
                     showToast("Lessons duplicated!", "success");
-                    setTimeout(() => location.reload(), 1500);  // reload after short delay
+                    setTimeout(() => location.reload(), 1500); // reload after short delay
                 } else {
                     showToast("Something went wrong.", "danger");
                     setTimeout(() => location.reload(), 1500);
@@ -797,18 +803,9 @@
                     let end = endHour * 60 + endMin;
 
                     // Handle overnight classes
-                    if (end < start) {
-                        end += 24 * 60;
-                    }
-
-                    const totalMinutes = end - start;
-                    totalHours = totalMinutes / 60;
-
-                    const hours = Math.floor(totalMinutes / 60);
-                    const minutes = totalMinutes % 60;
-
-                    durationStr = '';
-                    if (hours > 0) durationStr += `${hours} hour${hours > 1 ? 's' : ''}`;
+                    if (end < start) { end += 24 * 60; } const totalMinutes = end - start; totalHours = totalMinutes / 60; const
+                        hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60; durationStr = ''; if (hours > 0) durationStr +=
+                            `${hours} hour${hours > 1 ? 's' : ''}`;
                     if (minutes > 0 || hours === 0) {
                         if (durationStr) durationStr += ' ';
                         durationStr += `${minutes} minute${minutes !== 1 ? 's' : ''}`;
@@ -849,14 +846,14 @@
 
 
                 const content = `
-            <p><strong>Class:</strong> ${className}</p>
-            <p><strong>School:</strong> ${school}</p>
-            <p><strong>Time:</strong> ${timeText}</p>
-            <p><strong>Duration:</strong> ${durationStr}</p>
-            <p><strong>Rate:</strong> ${formattedRate}</p>
-            <p><strong>Total Payment:</strong> ${totalSalary}</p>
-            <p><strong>Paid:</strong> ${rawPaid}</p>
-        `;
+    <p><strong>Class:</strong> ${className}</p>
+    <p><strong>School:</strong> ${school}</p>
+    <p><strong>Time:</strong> ${timeText}</p>
+    <p><strong>Duration:</strong> ${durationStr}</p>
+    <p><strong>Rate:</strong> ${formattedRate}</p>
+    <p><strong>Total Payment:</strong> ${totalSalary}</p>
+    <p><strong>Paid:</strong> ${rawPaid}</p>
+    `;
                 // Show the modal with the content
                 document.getElementById('modalBodyContent').innerHTML = content;
                 new bootstrap.Modal(document.getElementById('lessonDetailModal')).show();
@@ -910,19 +907,13 @@
     }
 
     function nextStep() {
-        if (currentStep < steps.length - 1) {
-            currentStep++;
-            showStep(currentStep);
-        } else {
-            skipTutorial();
-        }
-    }
-
-    function prevStep() {
-        if (currentStep > 0) {
-            currentStep--;
-            showStep(currentStep);
-        }
+        if (currentStep < steps.length - 1) { currentStep++; showStep(currentStep); } else { skipTutorial(); }
+    } function
+        prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                showStep(currentStep);
+            }
     }
 
     function skipTutorial() {

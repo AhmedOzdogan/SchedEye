@@ -1,12 +1,12 @@
 from datetime import UTC, date, datetime, timedelta, timezone, time
 import time as time_module
+from flask import Flask, abort, render_template, request, redirect, session, url_for, flash
 from flask_mail import Mail, Message
 from functools import wraps
 import time
 import uuid
 import os
 from dotenv import load_dotenv
-from flask import Flask, abort, render_template, request, redirect, session, url_for, flash
 from numpy import extract
 import requests
 from sqlalchemy import Date, cast, distinct, func, desc, and_, extract, asc, text, literal_column
@@ -17,10 +17,15 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from flask_sqlalchemy import SQLAlchemy
 from itsdangerous import URLSafeTimedSerializer
 
+# Import custom modules
+from utils.helpers import send_email, add_demo, calculate_totals, get_unique_values_orm, get_totals_orm, get_month_names, format_timedelta_to_time_str
+from models import User, UserSession, TeachingSchedule, AdminActionLog, db
 
 
 
 
+
+# Initialize Flask app and extensions
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 
@@ -34,9 +39,9 @@ app.secret_key = os.getenv('SECRET_KEY', 'fallback-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
+db.init_app(app)  
 
-serializer = URLSafeTimedSerializer(app.secret_key)  # type: ignore
+serializer = URLSafeTimedSerializer(app.secret_key) # type: ignore 
 
 # Configure Flask-Mail
 app.config['MAIL_SERVER'] = 'mail.privateemail.com'
@@ -72,68 +77,83 @@ currency_codes = [
     " EUR", " GBP", " CHF", " SEK", " NOK", " DKK",
     " PLN", " CZK", " HUF", " RON", " BGN"
     ]
-
-
-class User(UserMixin, db.Model):
-    __tablename__ = 'users'
-
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    user_type = db.Column(db.String(20), default='regular')  # 'regular' or 'admin'
-    currency = db.Column(db.String(10), default=' USD') # instead of another func just add a space before it.
-    disabled = db.Column(db.Boolean, default=False)  # to disable user accounts
-    confirmed = db.Column(db.Boolean, default=False)  # to confirm user accounts
-    blocked = db.Column(db.Boolean, default=False)  # to block user accounts
-    registration_date = db.Column(db.Date, default=date.today) 
-    login_attempts = db.Column(db.Integer, default=0)  # Track login attempts
-
-    # Use string here
-    sessions = db.relationship('UserSession', backref='user', lazy=True)
-    schedules = db.relationship('TeachingSchedule', back_populates='teacher')
-
-
-class UserSession(db.Model):
-    __tablename__ = 'user_sessions'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    login_time = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
-    logout_time = db.Column(db.DateTime)
-    ip_address = db.Column(db.String(45))
-    user_agent = db.Column(db.String(255))
-    session_token = db.Column(db.String(64))
-    status = db.Column(db.String(32), default='success') 
-    
-
-class AdminActionLog(db.Model):
-    __tablename__ = 'admin_action_logs'
-
-    id = db.Column(db.Integer, primary_key=True)
-    admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    target_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    action = db.Column(db.String(50), nullable=False)  # e.g., 'disable_user'
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    note = db.Column(db.Text)
-    
-class TeachingSchedule(db.Model):
-    __tablename__ = 'teaching_schedule'
-
-    id = db.Column(db.Integer, primary_key=True)
-    class_name = db.Column("class", db.String(50), nullable=False)
-    date = db.Column(db.Date, nullable=False)
-    starttime = db.Column(db.Time, nullable=False)
-    endtime = db.Column(db.Time, nullable=False)
-    school = db.Column(db.String(50), nullable=False)
-    rate = db.Column(db.Numeric(10, 2), nullable=False, default=0.00)
-    paid = db.Column(db.String(3), nullable=False, default='no')
-
-    teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    teacher = db.relationship('User', back_populates='schedules')
-      
+# Define the feature list with descriptions, GIFs, and keywords
+feature_list = [
+    {
+        "title": "Update User Details",
+        "text": "You can easily update your username, password, and currency preferences. Just click your username at the top right and choose <strong>Settings</strong>.",
+        "gif": "update_user.gif",
+        "alt": "Update User Details GIF",
+        "keywords": "username password login details user account"
+    },
+    {
+        "title": "Adding a New Class",
+        "text": "To add a new class, click the <strong>Add Lesson</strong> button at the top, fill in the class name, date, time, and school information, then click <strong>Save</strong>.",
+        "gif": "add_lesson.gif",
+        "alt": "Add Class GIF",
+        "keywords": "add class schedule new lesson"
+    },
+    {
+        "title": "Edit Lesson",
+        "text": "You can edit your lessons without deleting them. Simply right-click on a lesson, select <strong>Edit</strong>, and update the details as needed.",
+        "gif": "edit_lesson.gif",
+        "alt": "Edit Lessons GIF",
+        "keywords": "edit class schedule modify lesson"
+    },
+    {
+        "title": "Update Payments",
+        "text": "Easily update the payment status for one or multiple lessons. Right-click on a lesson and choose <strong>Paid</strong> or <strong>Unpaid</strong>. You can also select multiple lessons at once to update them together.",
+        "gif": "paid_unpaid.gif",
+        "alt": "Update Payments GIF",
+        "keywords": "pay paid unpaid payments money"
+    },
+    {
+        "title": "Deleting Lessons",
+        "text": "Easily remove lessons from your schedule. Select the lessons you want to delete, then right-click and choose <strong>Delete</strong>. You can delete one or multiple lessons at once.",
+        "gif": "delete_lessons.gif",
+        "alt": "Delete Lessons GIF",
+        "keywords": "delete remove lessons schedule"
+    },
+    {
+        "title": "Duplicating Lessons",
+        "text": "Easily create copies of existing lessons. To duplicate a class, select it, right-click, and choose <strong>Duplicate</strong>. Then, pick the new date and time — your lesson will be copied instantly.",
+        "gif": "duplicate_single.gif",
+        "alt": "Duplicate Lessons GIF",
+        "keywords": "copy duplicate lessons"
+    },
+    {
+        "title": "Duplicating Weeks",
+        "text": "Easily copy an entire week of lessons. Select all the classes from the week, then choose the week you want to copy them to from the menu. All selected lessons will be duplicated to the new week without hassle.",
+        "gif": "duplicate_bundle.gif",
+        "alt": "Duplicate Weeks GIF",
+        "keywords": "copy duplicate week whole week lessons"
+    },
+    {
+        "title": "Lesson Details",
+        "text": "View detailed information for each lesson from the <strong>View</strong> menu. From there, you can also edit, duplicate, or delete lessons as needed.",
+        "gif": "details_lesson.gif",
+        "alt": "Lesson Details GIF",
+        "keywords": "view details lesson information"
+    },
+    {
+        "title": "Calculate Total Hours",
+        "text": "Quickly calculate the total hours for your lessons. Click <strong>Calculate</strong> at the top right to view your teaching hours by school, month, year, or overall.",
+        "gif": "calculate_hours.gif",
+        "alt": "Calculate Total Hours GIF",
+        "keywords": "Total hours calculate time"
+    },
+    {
+        "title": "Calculate Total Payments",
+        "text": "Quickly calculate your total payments. Click <strong>Calculate</strong> at the top right, then select <strong>Payments</strong>. You can view your salary, received payments, and pending amounts by school, class, month, or year.<br><br>You can also mark all lessons as <strong>Paid</strong> or <strong>Unpaid</strong> from this section without selecting them one by one.",
+        "gif": "Payments.gif",
+        "alt": "Calculate Total Payments GIF",
+        "keywords": "Total hours payment money salary calculate time"
+    }
+]
+ 
+# Function to get a user by a specific field (id, or email)     
 def get_user(field, value):
-    if field not in {'id', 'username', 'email'}:
+    if field not in {'id', 'email'}:
         raise ValueError("Invalid field for user lookup.")
 
     # Get the column dynamically from the model
@@ -142,55 +162,49 @@ def get_user(field, value):
     # Query the user
     return db.session.query(User).filter(column == value).first()
 
+# Decorator to require admin access
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not current_user.is_authenticated or current_user.user_type != 'admin':
-            abort(403)  # Forbidden
+                    
+            user_session = UserSession(
+                user_id=current_user.id,  # type: ignore
+                ip_address=request.remote_addr,  # type: ignore
+                user_agent=request.user_agent.string,  # type: ignore
+                session_token=session.get('session_token'),  # type: ignore
+                login_time=datetime.now(UTC),  # type: ignore
+                status='admin_access_denied'  # type: ignore
+            )
+            db.session.add(user_session)
+            db.session.commit()
+            
+            return render_template('abort.html'), 403
         return f(*args, **kwargs)
     return decorated_function
 
-def get_user_by_email(email):
-    return User.query.filter_by(email=email).first()
-
+# Load user by ID
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id)) 
-
-def send_email(to, subject, html_body):
-    msg = Message(
-        subject=subject,
-        sender=os.getenv('EMAIL_NOREPLY_USERNAME'),
-        recipients=[to]
-    )
-    msg.html = html_body
-
-    try:
-        mail.send(msg)
-        print(f"✅ Email sent to {to}")
-    except Exception as e:
-        print(f"❌ Failed to send email: {e}")
-
-
-def format_timedelta_to_time_str(value):
-    """Convert a timedelta to a formatted time string."""
-    return f"{value.hour:02d}:{value.minute:02d}"
-        
+ 
+# Route to handle user login       
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         
+        # Get form data
         email = request.form['email']
         password = request.form['password']
         session_token = str(uuid.uuid4())
         user_agent = request.user_agent.string
-        user = get_user_by_email(email)
+        user = get_user('email', email)
         now = datetime.now(UTC)
         ip = request.remote_addr
-                
+        
+        # reCAPTCHA verification    
         recaptcha_token = request.form.get('recaptcha_token')
         secret = os.getenv('RECAPTCHA_SECRET_KEY')
-        print(secret)
 
         recaptcha_response = requests.post(
             'https://www.google.com/recaptcha/api/siteverify',
@@ -200,23 +214,22 @@ def login():
             }
         )
         result = recaptcha_response.json()
-        print("reCAPTCHA result:", result)
         
-        
-        # if not result.get('success') or result.get('score', 0) < 0.5:
-        #     print("reCAPTCHA failed:", result)  # Optional logging
-        #     flash("reCAPTCHA verification failed. Are you a robot?")
-        #     session_entry = UserSession(
-        #         user_id=None, # type: ignore
-        #         ip_address=ip, # type: ignore
-        #         user_agent=user_agent, # type: ignore
-        #         session_token=None, # type: ignore
-        #         login_time=now, # type: ignore
-        #         status='invalid_captcha' # type: ignore
-        #     )
-        #     db.session.add(session_entry)
-        #     db.session.commit()
-        #     return redirect(url_for('login'))
+        # Check reCAPTCHA result
+        if not result.get('success') or result.get('score', 0) < 0.5:
+            print("reCAPTCHA failed:", result)  # Optional logging
+            flash("reCAPTCHA verification failed. Please try again!", "danger")
+            session_entry = UserSession(
+                user_id=None, # type: ignore
+                ip_address=ip, # type: ignore
+                user_agent=user_agent, # type: ignore
+                session_token=None, # type: ignore
+                login_time=now, # type: ignore
+                status='invalid_captcha' # type: ignore
+            )
+            db.session.add(session_entry)
+            db.session.commit()
+            return redirect(url_for('login'))
     
         
 
@@ -367,12 +380,12 @@ def login():
 
     return render_template('login.html', recaptcha_site_key=os.getenv('RECAPTCHA_SITE_KEY'))
 
-
+# Home route
 @app.route('/')
 def home():
     return render_template('home.html')
 
-
+# Contact route
 @app.route('/contact', methods=['GET', 'POST'])
 def contact():
     if current_user.is_authenticated:
@@ -412,9 +425,9 @@ def contact():
             "New Contact Form Submission",
             body_contact
         )
-        
-        if get_user_by_email(contact_email):
-            user = get_user_by_email(contact_email)
+
+        if get_user('email', contact_email):
+            user = get_user('email', contact_email)
             html_body = render_template('emails/contact_email.html')
             send_email(
                 user.email, # type: ignore
@@ -427,19 +440,22 @@ def contact():
 
     return render_template('contact.html', email=contact_email)
 
+# Features route
 @app.route('/features')
 def features():
     return render_template('features.html')
 
+# About route
 @app.route('/about')
 def about():
     return render_template('about.html')
 
+# Route to confirm email
 @app.route('/confirm/<token>')
 def confirm_email(token):
     try:
         email = serializer.loads(token, salt='email-confirm', max_age=3600)
-        user = get_user_by_email(email)
+        user = get_user('email', email)
 
         if user:
             if user.confirmed:
@@ -456,7 +472,8 @@ def confirm_email(token):
         flash('Invalid or expired confirmation link.', 'danger')
 
     return redirect(url_for('login'))
-       
+
+# Route to register a new user
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     global currency_codes
@@ -472,19 +489,19 @@ def register():
         currency = f' {currency_input}' if currency_input else ' USD'
 
         # Validation checks
-        if get_user_by_email(email):
+        if get_user('email', email):
             flash('Email already exists.', 'danger')
             return redirect(url_for('register'))
 
-        elif len(password) < 8:
+        if len(password) < 8:
             flash('Password must be at least 8 characters long.', 'danger')
             return redirect(url_for('register'))
 
-        elif password != password_again:
+        if password != password_again:
             flash('Passwords do not match.', 'danger')
             return redirect(url_for('register'))
 
-        elif not any(char.isdigit() for char in password):
+        if not any(char.isdigit() for char in password):
             flash('Password must contain at least one digit.', 'danger')
             return redirect(url_for('register'))
 
@@ -511,53 +528,21 @@ def register():
         db.session.commit()
         
         # Create example classes for the new user
-        example_classes = [
-            TeachingSchedule(
-                class_name='Demo Class 1', # type: ignore
-                date=date.today(), # type: ignore
-                starttime=time(9, 0), # type: ignore
-                endtime=time(10, 0), # type: ignore
-                school='', # type: ignore
-                rate=0.00, # type: ignore
-                paid='no', # type: ignore
-                teacher_id=new_user.id # type: ignore
-            ),
-            TeachingSchedule(
-                class_name='Demo Class 2', # type: ignore
-                date=date.today(), # type: ignore
-                starttime=time(10, 30), # type: ignore
-                endtime=time(11, 30), # type: ignore
-                school='', # type: ignore
-                rate=0.00, # type: ignore
-                paid='no', # type: ignore
-                teacher_id=new_user.id # type: ignore
-            ),
-            TeachingSchedule(
-                class_name='Demo Class 3', # type: ignore 
-                date=date.today(), # type: ignore
-                starttime=time(13, 0), # type: ignore
-                endtime=time(14, 0), # type: ignore
-                school='', # type: ignore
-                rate=0.00, # type: ignore
-                paid='no', # type: ignore
-                teacher_id=new_user.id # type: ignore
-            )
-        ]
-
-        db.session.add_all(example_classes) 
-        db.session.commit()
-
+        add_demo(new_user.id) # type: ignore
+        
+        
         flash('Registration successful! Please check your email to confirm your account.', 'info')
         time.sleep(2)
         return redirect(url_for('login'))
 
     return render_template('register.html', currency_codes=currency_codes)
 
+# Route to handle password reset
 @app.route('/forgot_password', methods=['GET', 'POST'])
 def forgot_password():
     if request.method == 'POST':
         email = request.form['email']
-        user = get_user_by_email(email)
+        user = get_user('email', email)
         ip = request.remote_addr
 
         if user.blocked: # type: ignore
@@ -591,6 +576,7 @@ def forgot_password():
 
     return render_template('forgot_password.html')
 
+# Route to reset password using a token
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
     try:
@@ -598,10 +584,9 @@ def reset_password(token):
     except:
         flash('Reset link is invalid or expired.', 'danger')
         return redirect(url_for('forgot_password'))
-    
-    user = get_user_by_email(email)
-    
-    
+
+    user = get_user('email', email)
+
     if user and user.blocked:
         session_entry = UserSession(
         user_id=user.id, # type: ignore
@@ -655,9 +640,15 @@ def reset_password(token):
     return render_template('reset_password.html', token=token)
 
 
+# Route to view the dashboard
+# This route displays the user's teaching schedule for the current week, allows date selection, and shows tutorial features.
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    
+    global feature_list
+    
+    # Get the selected date from the session or default to today
     if request.args.get('reset_search_date') == '1':
         session['search_date'] = date.today().isoformat()  # Reset to today
     if request.args.get('date_search_triggered') == '1':
@@ -667,9 +658,6 @@ def dashboard():
         selected_date = session.get('search_date')
     
 
-    print("Selected date from session:", selected_date)
-    print("search date is ",session.get('search_date'))
-    
     if selected_date:
         selected_date_dt = datetime.strptime(selected_date, "%Y-%m-%d")
     
@@ -700,80 +688,6 @@ def dashboard():
 
     login_count = db.session.query(UserSession).filter_by(user_id=current_user.id).count()
     show_tutorial = login_count < 3 and session.get('show_tutorial', False)
-    
-    
-    feature_list = [
-    {
-        "title": "Update User Details",
-        "text": "You can easily update your username, password, and currency preferences. Just click your username at the top right and choose <strong>Settings</strong>.",
-        "gif": "update_user.gif",
-        "alt": "Update User Details GIF",
-        "keywords": "username password login details user account"
-    },
-    {
-        "title": "Adding a New Class",
-        "text": "To add a new class, click the <strong>Add Lesson</strong> button at the top, fill in the class name, date, time, and school information, then click <strong>Save</strong>.",
-        "gif": "add_lesson.gif",
-        "alt": "Add Class GIF",
-        "keywords": "add class schedule new lesson"
-    },
-    {
-        "title": "Edit Lesson",
-        "text": "You can edit your lessons without deleting them. Simply right-click on a lesson, select <strong>Edit</strong>, and update the details as needed.",
-        "gif": "edit_lesson.gif",
-        "alt": "Edit Lessons GIF",
-        "keywords": "edit class schedule modify lesson"
-    },
-    {
-        "title": "Update Payments",
-        "text": "Easily update the payment status for one or multiple lessons. Right-click on a lesson and choose <strong>Paid</strong> or <strong>Unpaid</strong>. You can also select multiple lessons at once to update them together.",
-        "gif": "paid_unpaid.gif",
-        "alt": "Update Payments GIF",
-        "keywords": "pay paid unpaid payments money"
-    },
-    {
-        "title": "Deleting Lessons",
-        "text": "Easily remove lessons from your schedule. Select the lessons you want to delete, then right-click and choose <strong>Delete</strong>. You can delete one or multiple lessons at once.",
-        "gif": "delete_lessons.gif",
-        "alt": "Delete Lessons GIF",
-        "keywords": "delete remove lessons schedule"
-    },
-    {
-        "title": "Duplicating Lessons",
-        "text": "Easily create copies of existing lessons. To duplicate a class, select it, right-click, and choose <strong>Duplicate</strong>. Then, pick the new date and time — your lesson will be copied instantly.",
-        "gif": "duplicate_single.gif",
-        "alt": "Duplicate Lessons GIF",
-        "keywords": "copy duplicate lessons"
-    },
-    {
-        "title": "Duplicating Weeks",
-        "text": "Easily copy an entire week of lessons. Select all the classes from the week, then choose the week you want to copy them to from the menu. All selected lessons will be duplicated to the new week without hassle.",
-        "gif": "duplicate_bundle.gif",
-        "alt": "Duplicate Weeks GIF",
-        "keywords": "copy duplicate week whole week lessons"
-    },
-    {
-        "title": "Lesson Details",
-        "text": "View detailed information for each lesson from the <strong>View</strong> menu. From there, you can also edit, duplicate, or delete lessons as needed.",
-        "gif": "details_lesson.gif",
-        "alt": "Lesson Details GIF",
-        "keywords": "view details lesson information"
-    },
-    {
-        "title": "Calculate Total Hours",
-        "text": "Quickly calculate the total hours for your lessons. Click <strong>Calculate</strong> at the top right to view your teaching hours by school, month, year, or overall.",
-        "gif": "calculate_hours.gif",
-        "alt": "Calculate Total Hours GIF",
-        "keywords": "Total hours calculate time"
-    },
-    {
-        "title": "Calculate Total Payments",
-        "text": "Quickly calculate your total payments. Click <strong>Calculate</strong> at the top right, then select <strong>Payments</strong>. You can view your salary, received payments, and pending amounts by school, class, month, or year.<br><br>You can also mark all lessons as <strong>Paid</strong> or <strong>Unpaid</strong> from this section without selecting them one by one.",
-        "gif": "Payments.gif",
-        "alt": "Calculate Total Payments GIF",
-        "keywords": "Total hours payment money salary calculate time"
-    }
-]
 
 
     return render_template('dashboard.html',
@@ -785,12 +699,15 @@ def dashboard():
                            selected_date=selected_date,
                            feature_list=feature_list,)
 
+# Route to mark the tutorial as seen
+# This route updates the session to hide the tutorial on the dashboard during the same session.
 @app.route('/mark_tutorial_seen', methods=['POST'])
 @login_required
 def mark_tutorial_seen():
     session['show_tutorial'] = False
     return '', 204
 
+# Route to session timeout
 @app.before_request
 def session_timeout():
     session.permanent = True
@@ -804,10 +721,12 @@ def session_timeout():
             if (now - last_activity_dt) > timedelta(minutes=5):
                 logout_user()
                 session.clear()
-                flash('You have been logged out due to inactivity.', 'info')
+                flash('You have been logged out due to inactivity.', 'warning')
                 return redirect(url_for('login'))
         session['last_activity'] = now.strftime("%Y-%m-%d %H:%M:%S")
 
+# Route to handle user logout
+# This route logs out the user, updates the logout time in the UserSession model, and clears the session.
 @app.route('/logout')
 @login_required
 def logout():
@@ -828,7 +747,8 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-    
+# Route to toggle paid status for lessons
+# This route updates the payment status of selected lessons to 'yes' (paid).
 @app.route('/toggle_paid', methods=['POST'])
 @login_required
 def toggle_paid():
@@ -852,7 +772,8 @@ def toggle_paid():
 
     return f"Updated {updated} lesson(s) as paid", 200
 
-
+# Route to toggle unpaid status for lessons
+# This route updates the payment status of selected lessons to 'no' (unpaid).
 @app.route('/toggle_unpaid', methods=['POST'])
 @login_required
 def toggle_unpaid():
@@ -881,7 +802,8 @@ from datetime import datetime, timedelta
 
 
 
-
+# Route to edit a lesson
+# This route allows users to edit an existing lesson in their teaching schedule.
 @app.route('/edit/<int:lesson_id>', methods=['POST', 'GET'])
 @login_required
 def edit_lesson(lesson_id):
@@ -895,8 +817,8 @@ def edit_lesson(lesson_id):
         return redirect(url_for('dashboard'))
 
     if request.method == 'GET':
-        starttime= format_timedelta_to_time_str(lesson.starttime)
-        endtime = format_timedelta_to_time_str(lesson.endtime)
+        starttime= format_timedelta_to_time_str(lesson.starttime) # type: ignore
+        endtime = format_timedelta_to_time_str(lesson.endtime)  # type: ignore
         
     elif request.method == 'POST':
         # Get form values
@@ -938,7 +860,8 @@ def edit_lesson(lesson_id):
         form_action=url_for('edit_lesson', lesson_id=lesson_id)
     )
 
-    
+# Route to add a new lesson
+# This route allows users to add a new lesson to their teaching schedule.   
 @app.route('/add_lesson', methods=['POST', 'GET'])
 @login_required
 def add_lesson():
@@ -990,6 +913,8 @@ def add_lesson():
                            form_action = url_for('add_lesson')
     )
     
+# Route to toggle delete status for lessons
+# This route allows users to delete selected lessons from their teaching schedule.
 @app.route('/toggle_delete', methods=['POST'])
 @login_required
 def toggle_delete_bulk():
@@ -1013,6 +938,8 @@ def toggle_delete_bulk():
 
     # return '', 204
     
+# Route to duplicate a lesson
+# This route allows users to duplicate an existing lesson in their teaching schedule.   
 @app.route('/duplicate/<int:lesson_id>', methods=['GET','POST'])
 @login_required
 def duplicate_lesson(lesson_id):
@@ -1075,7 +1002,8 @@ def duplicate_lesson(lesson_id):
                            form_action = url_for('duplicate_lesson', lesson_id=lesson_id)
     )
 
-
+# Route to duplicate multiple lessons in bulk
+# This route allows users to duplicate multiple lessons in their teaching schedule for a specific week.
 @app.route('/duplicate_bulk', methods=['POST'])
 @login_required
 def duplicate_bulk():
@@ -1117,28 +1045,8 @@ def duplicate_bulk():
     db.session.commit()
     return "Duplicate", 200
 
-
-def calculate_totals(data): 
-    total_hours = 0
-    total_salary = 0
-    hourly_rate = 0
-    currency = current_user.currency.strip()
-
-    if not data:
-        return total_hours, f"0 {currency}", hourly_rate, 
-    else:
-        for row in data:
-            rate_perhour = row[0]
-            total_hour = row[1]
-            total_hours += total_hour
-            total_salary += rate_perhour * total_hour
-            hourly_rate = rate_perhour
-
-        # Format total salary with thousand separators and append currency
-        total_salary_2 = f"{int(total_salary):,}".replace(",", ".") + f" {currency}"
-        return total_hours, total_salary_2, hourly_rate, 
-
-
+# Admin routes
+# These routes are accessible only to users with admin privileges.
 @app.route('/admin')
 @admin_required
 def admin_home():
@@ -1223,6 +1131,8 @@ def admin_users():
         'disabled': disabled
     }, user_count=user_count, last_login_map=last_login_map)
 
+# Route to edit a user
+# This route allows admins to edit user details, including username, email, user type, currency
 @app.route('/admin/edit_user/<int:user_id>', methods=['GET', 'POST'])
 @admin_required
 def edit_user(user_id):
@@ -1338,6 +1248,8 @@ def edit_user(user_id):
         enable_count=enable_count
     )
 
+# Route to view and manage user sessions
+# This route allows admins to view all user sessions, filter by various criteria, and see session
 @app.route('/admin/sessions')
 @admin_required
 def admin_sessions():
@@ -1383,6 +1295,8 @@ def admin_sessions():
 
     return render_template('admin_sessions.html', sessions=sessions, filters=filters, sessions_count=sessions_count)
 
+# Route to view and manage user settings
+# This route allows users to view and update their account settings, including username, email, currency, and password.
 @app.route('/settings', methods=['GET'])
 @login_required
 def settings():
@@ -1390,6 +1304,7 @@ def settings():
 
     return render_template('settings.html', user=current_user, currency_codes=currency_codes)
 
+# Route to update account information
 @app.route('/update_account_info', methods=['POST'])
 @login_required
 def update_account_info():
@@ -1428,6 +1343,8 @@ def update_account_info():
 
     return redirect(url_for('settings'))
 
+# Route to change user password
+# This route allows users to change their password after verifying the current password.
 @app.route('/change_password', methods=['POST'])
 @login_required
 def change_password():
@@ -1453,70 +1370,7 @@ def change_password():
     flash('Password changed successfully!', 'success')
     return redirect(url_for('settings'))
 
-
-    
-
-def get_unique_values_orm(session, model, field_expr, filters, alias="value"):
-    """
-    SQLAlchemy ORM version of get_unique_values.
-
-    Args:
-        session: SQLAlchemy session (e.g. db.session)
-        model: SQLAlchemy model (e.g. TeachingSchedule)
-        field_expr: SQLAlchemy column expression (e.g. extract('year', model.date))
-        filters: dict of {column: value}, where column is either a string or model attribute
-        alias: alias for the selected field
-
-    Returns:
-        List of unique values ordered by the alias.
-    """
-
-    # Apply label (alias) to the field expression
-    labeled_field = field_expr.label(alias)
-
-    # Build base query
-    query = session.query(distinct(labeled_field))
-
-    # Apply filters
-    for key, value in filters.items():
-        col = getattr(model, key) if isinstance(key, str) else key
-        query = query.filter(col == value)
-
-    # Order by alias
-    query = query.order_by(asc(labeled_field))
-
-    return [row[0] for row in query.all()]
-
-def get_totals_orm(session, year, teacher_id, paid="yes", month=None, school=None):
-    # Use TIME_TO_SEC(endtime - starttime)/3600
-    duration_expr = (
-        func.time_to_sec(
-            func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
-        ) / 3600
-    ).label("total_hour")
-
-    query = session.query(
-        TeachingSchedule.rate.label("rate_perhour"),
-        duration_expr
-    ).filter(
-        extract('year', TeachingSchedule.date) == year,
-        TeachingSchedule.teacher_id == teacher_id,
-        TeachingSchedule.paid == paid
-    )
-
-    if month:
-        query = query.filter(extract('month', TeachingSchedule.date) == month)
-    if school:
-        query = query.filter(TeachingSchedule.school == school)
-
-    query = query.order_by(extract('month', TeachingSchedule.date))
-
-    results = query.all()
-    return calculate_totals(results)
-
-def get_month_names(month_nums, month_names_dict):
-    return [month_names_dict.get(num, "Unknown") for num in month_nums]
-
+# Route to view and manage payments
 @app.route('/payments', methods=['GET', 'POST'])
 @login_required
 def payments():
@@ -1863,6 +1717,7 @@ def payments():
         schools_unpaid=schools_unpaid,
     )
 
+# Route to calculate teaching hours.
 @app.route('/calculate_hours', methods=['GET', 'POST'])
 @login_required
 def calculate_hours():
@@ -2025,17 +1880,17 @@ def calculate_hours():
     )
 
 
-        
-@app.route('/test_register_email') # type: ignore
+# Debug route to test email sending
+# @app.route('/test_register_email') # type: ignore
 
-def test_register_email():
-    send_email(
-            "admin@schedeye.com",
-            "New Contact Form Submission",
-            f"Email: {"deneme"}\nTopic: {"topic"}\nMessage: {"message"}"
-        )
+# def test_register_email():
+#     send_email(
+#             "admin@schedeye.com",
+#             "New Contact Form Submission",
+#             f"Email: {"deneme"}\nTopic: {"topic"}\nMessage: {"message"}"
+#         )
 
-    return "Email sent successfully!"
+#     return "Email sent successfully!"
 
 
 if __name__ == '__main__':
