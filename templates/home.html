@@ -4,25 +4,26 @@
 {% block title %}SchedEye - Home{% endblock %}
 
 {% block body %}
-<div class="container mt-5">
+<div class="container mt-4 px-3">
 
     <!-- Tagline Header -->
-    <div class="text-center mb-5">
-        <h1 class="display-5 fw-bold">SchedEye: You Lead the Class. We’ll Handle the Details.</h1>
-        <p class="text-muted mt-2" style="font-size: 1.2rem;">
+    <div class="mb-5 text-start text-md-center">
+        <h1 class="fw-bold fs-4 fs-md-2">SchedEye: You Lead the Class. <br class="d-md-none">We’ll Handle the Details.
+        </h1>
+        <p class="text-muted mt-2 fs-6 fs-md-5">
             Smart scheduling and payment tracking — built just for teachers.
         </p>
     </div>
 
-    <!-- First Section: Intro and Image -->
-    <div class="row align-items-center mb-5">
-        <div class="col-md-7">
-            <h2 class="mb-3">Everything You Need, All in One Place</h2>
-            <p class="lead">
+    <!-- First Section -->
+    <div class="row align-items-center gy-4 mb-5">
+        <div class="col-12 col-md-7 text-start text-md-start">
+            <h2 class="fs-5 fs-md-3 mb-2">Everything You Need, All in One Place</h2>
+            <p class="fs-6 fs-md-5">
                 Teaching is already a full-time job. SchedEye helps you manage your schedule, track payments,
                 and stay organized — all with zero clutter and zero cost.
             </p>
-            <ul style="font-size: 1.1rem;">
+            <ul class="list-unstyled small text-start text-md-start">
                 <li>✅ Schedule classes and track them easily</li>
                 <li>✅ Record payments and set up alerts</li>
                 <li>✅ View clear summaries of your weekly or monthly work</li>
@@ -31,36 +32,77 @@
                 <li>✅ <strong>Free</strong> — no ads, no hidden fees</li>
             </ul>
         </div>
-        <div class="col-md-5 text-center">
-            <img src="{{ url_for('static', filename='images/home/tiredteacher.jpg') }}" alt="Tired Teacher"
-                class="img-fluid rounded shadow" style="max-height: 350px;">
-            <p class="text-muted mt-2">Still using Excel and sticky notes?</p>
+        <div class="col-12 col-md-5 text-start">
+            <img src="{{ url_for('static', filename='images/home/tiredteacher.jpg') }}"
+                class="img-fluid rounded shadow w-100" style="max-height: 320px; object-fit: cover;"
+                alt="Tired Teacher">
+            <p class="text-muted small mt-1">Still using Excel and sticky notes?</p>
         </div>
     </div>
 
-    <!-- Second Section: Benefits and Image -->
-    <div class="row align-items-center">
-        <div class="col-md-7 order-md-2">
-            <h3 class="mb-3">Made for Teachers Like You</h3>
-            <p class="lead">
+    <!-- Screenshot Preview / Desktop -->
+    <div class="text-center my-5 d-none d-md-block">
+        <img src="{{ url_for('static', filename='images/home/home_page.jpg') }}" alt="SchedEye Desktop Preview"
+            class="img-fluid rounded shadow" style="max-width: 100%; height: auto;">
+        <p class="text-muted mt-2">A glimpse of your smart dashboard (Desktop View)</p>
+    </div>
+
+    <!-- Screenshot Preview / Mobile -->
+    <div class="text-center my-5 d-block d-md-none">
+        <div class="row g-3 justify-content-center">
+            <div class="col-6">
+                <img src="{{ url_for('static', filename='images/home/mobile_page1.png') }}"
+                    alt="SchedEye Mobile Preview 1" class="img-fluid rounded shadow">
+            </div>
+            <div class="col-6">
+                <img src="{{ url_for('static', filename='images/home/mobile_page2.png') }}"
+                    alt="SchedEye Mobile Preview 2" class="img-fluid rounded shadow">
+            </div>
+            <div class="col-6">
+                <img src="{{ url_for('static', filename='images/home/mobile_page3.png') }}"
+                    alt="SchedEye Mobile Preview 3" class="img-fluid rounded shadow">
+            </div>
+        </div>
+        <p class="text-muted mt-3">Your dashboard at your fingertips (Mobile View)</p>
+    </div>
+
+
+    <!-- Second Section -->
+    <div class="row align-items-center gy-4">
+        <div class="col-12 col-md-7 order-2 order-md-1 text-start text-md-start">
+            <h3 class="fs-5 fs-md-3 mb-2">Made for Teachers Like You</h3>
+            <p class="fs-6 fs-md-5">
                 Whether you're freelancing, tutoring, or teaching at a center — SchedEye is the digital assistant
                 that helps you stay in control without the stress.
             </p>
-            <ul style="font-size: 1.1rem;">
+            <ul class="list-unstyled small text-start text-md-start">
                 <li>📅 Visual calendar with color-coded classes</li>
                 <li>💸 Payment tracking with due date alerts</li>
                 <li>🔔 Smart reminders for your day</li>
                 <li>📂 Easily access your student history and class logs</li>
                 <li>💻 Designed by teachers, for teachers</li>
             </ul>
-            <p class="mt-3 text-success"><strong>And yes — it’s totally free.</strong></p>
+            <p class="mt-2 text-success fw-semibold"><strong>And yes — it’s totally free.</strong></p>
         </div>
-        <div class="col-md-5 text-center order-md-1">
-            <img src="{{ url_for('static', filename='images/home/happyteacher.jpg') }}" alt="Happy Teacher"
-                class="img-fluid rounded shadow" style="max-height: 350px;">
-            <p class="text-muted mt-2">Let SchedEye simplify your teaching life.</p>
+        <div class="col-12 col-md-5 order-1 order-md-2 text-end">
+            <img src="{{ url_for('static', filename='images/home/happyteacher.jpg') }}"
+                class="img-fluid rounded shadow w-100" style="max-height: 320px; object-fit: cover;"
+                alt="Happy Teacher">
+            <p class="text-muted small mt-1">Let SchedEye simplify your teaching life.</p>
+        </div>
+
+    </div>
+
+    <!-- Call to Action -->
+    <div class="text-center my-5">
+        <h2 class="fw-bold mb-3">Ready to simplify your teaching life?</h2>
+        <p class="lead mb-4">Join hundreds of teachers already using SchedEye. It’s free, simple, and built for you.</p>
+        <div class="d-flex justify-content-center gap-3 flex-wrap">
+            <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">Get Started Now</a>
+            <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg">Log In</a>
         </div>
     </div>
 
+    <div style="height: 60px;"></div>
 </div>
 {% endblock %}

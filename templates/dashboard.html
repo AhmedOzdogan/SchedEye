@@ -110,11 +110,16 @@
 
 
 
-{% block body %}<h1 class="text-center my-4 text-primary">
-    Weekly Schedule ({{ start_date.strftime('%B %d') }} – {{ end_date.strftime('%B %d, %Y') }})
+{% block body %}
+<h1 class="text-center my-3 text-primary fs-4 fs-md-2">
+    Weekly Schedule<br class="d-md-none" />
+    <small class="d-block d-md-inline text-secondary">
+        ({{ start_date.strftime('%b %d') }} – {{ end_date.strftime('%b %d, %Y') }})
+    </small>
 </h1>
 
-<div class="table-responsive">
+<!-- DESKTOP / TABLET VIEW -->
+<div class="table-responsive d-none d-md-block">
     <table class="table table-bordered table-striped align-top text-left mx-auto" style="width: 80%;">
         <thead class="table-primary">
             <tr>
@@ -129,7 +134,6 @@
                 <td class="bg-white">
                     {% for lesson in teaching_schedule_data %}
                     {% if lesson.date.strftime('%A') == day %}
-
                     {% set start = lesson.starttime.hour * 3600 + lesson.starttime.minute * 60 %}
                     {% set end = lesson.endtime.hour * 3600 + lesson.endtime.minute * 60 %}
 
@@ -142,10 +146,12 @@
                             –
                             {{ "%02d:%02d" % (end // 3600, (end % 3600) // 60) }}
                         </small><br>
-                        <small>{{ lesson.rate }} {{ current_user.currency }}</small><br>
-                        <small class="{{ 'text-success' if lesson.paid == 'yes' else 'text-danger' }}">
-                            Paid: {{ 'Yes' if lesson.paid == 'yes' else 'No' }}
-                        </small>
+                        <div class=>
+                            <small>{{ lesson.rate }} {{ current_user.currency }}</small><br>
+                            <small class="{{ 'text-success' if lesson.paid == 'yes' else 'text-danger' }}">
+                                Paid: {{ 'Yes' if lesson.paid == 'yes' else 'No' }}
+                            </small>
+                        </div>
                     </div>
                     {% endif %}
                     {% endfor %}
@@ -155,6 +161,29 @@
         </tbody>
     </table>
 </div>
+
+<!-- MOBILE CARD VIEW -->
+<div class="d-block d-md-none px-3">
+    {% for day in week_dates %}
+    <div class="mb-3">
+        <h5 class="fw-bold">{{ day.day_name }} - {{ day.day_date }}</h5>
+        {% for lesson in teaching_schedule_data %}
+        {% if lesson.date.strftime('%A') == day.day_name %}
+        <div class="card mb-2 shadow-sm lesson" data-lesson-id="{{ lesson.id }}">
+            <div class="card-body p-3">
+                <h6 class="card-title mb-1 fw-semibold">{{ lesson.class_name }}</h6>
+                <p class="text-muted mb-1">{{ lesson.school }}</p>
+                <p class="mb-0 small">
+                    {{ lesson.starttime.strftime("%H:%M") }} – {{ lesson.endtime.strftime("%H:%M") }}
+                </p>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
 
 
 <!-- Context Menu -->
@@ -306,7 +335,7 @@
 <!-- Reusable Confirmation Modal -->
 <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel"
     aria-hidden="true">
-    <div class="tutorial-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-sm modal-dialog-scrollable">
         <div class="modal-content">
 
             <div class="modal-header">
@@ -411,8 +440,6 @@
                     selectedLessons.add(lessonId);
                     this.classList.add('selected-lesson');
                 }
-
-                console.log('Current selected lessons:', Array.from(selectedLessons));
             });
         });
 
