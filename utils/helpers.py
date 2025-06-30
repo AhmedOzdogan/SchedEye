@@ -6,8 +6,7 @@
 import os
 from flask_login import current_user
 from flask_mail import Message
-from numpy import extract
-from sqlalchemy import asc, distinct, func
+from sqlalchemy import asc, distinct, func, extract 
 from models import TeachingSchedule
 
 
@@ -128,7 +127,9 @@ def get_unique_values_orm(session, model, field_expr, filters, alias="value"):
 
 # Function to calculate totals from a list of results
 def get_totals_orm(session, year, teacher_id, paid="yes", month=None, school=None):
-    from app import TeachingSchedule
+    
+    print(type(paid))   
+    print(f"Paid status: {paid}") 
     # Use TIME_TO_SEC(endtime - starttime)/3600
     duration_expr = (
         func.time_to_sec(
