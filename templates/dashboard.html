@@ -56,21 +56,21 @@
 <div class="container mt-4">
     <div class="row gx-2 gy-2 align-items-center flex-wrap">
 
-        <!-- Date input and Search button inside same form -->
+        <!-- Date input and hidden inside a form -->
         <div class="col-12 col-md-auto">
-            <form method="GET" action="{{ url_for('dashboard') }}"
+            <form method="GET" action="{{ url_for('dashboard') }}" id="dateSearchForm"
                 class="d-flex flex-wrap align-items-center gap-2 mb-0">
                 <input type="date" id="selected_date" name="selected_date" class="form-control"
                     value="{{ selected_date or '' }}" required>
                 <input type="hidden" name="date_search_triggered" value="1">
-
             </form>
         </div>
 
+        <!-- Button outside form, linked using `form` attribute -->
         <div class="col-12 col-md-auto">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-primary btn-sm w-100 w-md-auto">
+            <button type="submit" form="dateSearchForm" class="btn btn-primary btn-sm w-100 w-md-auto">
                 <i class="bi bi-search"></i> Search
-            </a>
+            </button>
         </div>
 
         <!-- Add a Lesson button -->
