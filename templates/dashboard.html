@@ -11,12 +11,6 @@
         border: 0px solid #f80000;
     }
 
-    .lesson {
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-touch-callout: none;
-        /* Disables iOS copy/paste bubble */
-    }
 
     .tutorial-overlay {
         display: block;
@@ -194,13 +188,19 @@
                 <p class="mb-0 small">
                     {{ lesson.starttime.strftime("%H:%M") }} – {{ lesson.endtime.strftime("%H:%M") }}
                 </p>
+                <div class="lesson-menu-btn d-md-none text-end">
+                    <button class="btn btn-sm btn-light border" data-lesson-id="{{ lesson.id }}">⋮</button>
+                </div>
             </div>
         </div>
         {% endif %}
         {% endfor %}
     </div>
     {% endfor %}
+    <div style="height: 100px;"></div>
 </div>
+
+
 
 
 
@@ -491,9 +491,61 @@
             }
         });
 
-        // Hide context menu on regular click anywhere
-        document.addEventListener("click", function () {
-            menu.style.display = "none";
+        document.querySelectorAll(".lesson-menu-btn button").forEach(btn => {
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                selectedLessonId = this.dataset.lessonId;
+
+                const rect = this.getBoundingClientRect();
+                const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+
+                const menu = document.getElementById("contextMenu");
+
+                // 🔧 Step 1: Show the menu temporarily to measure size
+                menu.style.visibility = 'hidden';
+                menu.style.display = 'block';
+                menu.style.left = '0px';
+                menu.style.top = '0px';
+
+                const menuWidth = menu.offsetWidth;
+                const menuHeight = menu.offsetHeight;
+                const offsetX = 4;
+                const offsetY = 4;
+
+                // 🔧 Step 2: Check available space below
+                const spaceBelow = window.innerHeight - rect.bottom;
+
+                let top;
+                if (spaceBelow < menuHeight + offsetY) {
+                    // Not enough space below — open upward
+                    top = rect.top + scrollTop - menuHeight - offsetY;
+                } else {
+                    // Enough space — open downward
+                    top = rect.top + scrollTop;
+                }
+
+                // 🔧 Step 3: Align right edge of menu with button
+                menu.style.left = `${rect.right + scrollLeft - menuWidth - offsetX}px`;
+                menu.style.top = `${top}px`;
+                menu.style.visibility = 'visible';
+            });
+        });
+
+
+
+
+
+        // Only hide menu when clicking outside
+        document.addEventListener("click", function (e) {
+            const isMenu = e.target.closest("#contextMenu");
+            const isMenuButton = e.target.closest(".lesson-menu-btn button");
+
+            if (!isMenu && !isMenuButton) {
+                menu.style.display = "none";
+            }
         });
 
         // Helper function to go to a specific route
@@ -502,180 +554,156 @@
                 window.location.href = `/${action}/${selectedLessonId}`;
             }
         }
-        let touchTimer = null;
 
-        document.addEventListener("touchstart", function (e) {
-            if (!e.target.closest("#contextMenu") && !e.target.closest(".lesson")) {
-                menu.style.display = "none";
-            }
-            if (lessonBox) {
-                touchTimer = setTimeout(() => {
-                    selectedLessonId = lessonBox.dataset.lessonId;
-                    const touch = e.touches[0];
+    });
+    // Edit action
+    document.getElementById("editOption").addEventListener("click", function () {
+        goToAction("edit");
+    });
 
-                    menu.style.left = `${touch.pageX}px`;
-                    menu.style.top = `${touch.pageY}px`;
-                    menu.style.display = "block";
-                }, 600); // 600ms = long press
-            }
-        });
+    // Duplicate action
+    document.getElementById("duplicateOption").addEventListener("click", function () {
+        if (selectedLessons.size === 1) {
+            const lessonId = Array.from(selectedLessons)[0];
+            window.location.href = `/duplicate/${lessonId}`;
+        } else if (selectedLessons.size > 1) {
+            // Show the calendar modal
+            const modal = new bootstrap.Modal(document.getElementById('duplicateModal'));
+            modal.show();
+        } else if (selectedLessonId) {
+            window.location.href = `/duplicate/${selectedLessonId}`;
+        }
+    });
 
-        document.addEventListener("touchend", function () {
-            clearTimeout(touchTimer);
-        });
+    // Handle duplicate confirmation
+    document.getElementById("confirmDuplicateBtn").addEventListener("click", function () {
+        const date = document.getElementById("copyDate").value;
+        const button = this;
 
-        document.addEventListener("touchmove", function () {
-            clearTimeout(touchTimer); // Cancel on scroll or movement
-        });
-        // Edit action
-        document.getElementById("editOption").addEventListener("click", function () {
-            goToAction("edit");
-        });
+        if (!date) {
+            showToast("Please select a date.", "warning");
+            return;
+        }
 
-        // Duplicate action
-        document.getElementById("duplicateOption").addEventListener("click", function () {
-            if (selectedLessons.size === 1) {
-                const lessonId = Array.from(selectedLessons)[0];
-                window.location.href = `/duplicate/${lessonId}`;
-            } else if (selectedLessons.size > 1) {
-                // Show the calendar modal
-                const modal = new bootstrap.Modal(document.getElementById('duplicateModal'));
-                modal.show();
-            } else if (selectedLessonId) {
-                window.location.href = `/duplicate/${selectedLessonId}`;
-            }
-        });
+        // Prevent multiple clicks
+        button.disabled = true;
+        button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Duplicating...`;
 
-        // Handle duplicate confirmation
-        document.getElementById("confirmDuplicateBtn").addEventListener("click", function () {
-            const date = document.getElementById("copyDate").value;
-            const button = this;
-
-            if (!date) {
-                showToast("Please select a date.", "warning");
-                return;
-            }
-
-            // Prevent multiple clicks
-            button.disabled = true;
-            button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Duplicating...`;
-
-            fetch("/duplicate_bulk", {
+        fetch("/duplicate_bulk", {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                lesson_ids: Array.from(selectedLessons),
+                copy_date: date
+            })
+        })
+            .then(res => {
+                if (res.ok) {
+                    showToast("Lessons duplicated!", "success");
+                    setTimeout(() => location.reload(), 1500);  // reload after short delay
+                } else {
+                    showToast("Something went wrong.", "danger");
+                    setTimeout(() => location.reload(), 1500);
+                }
+            })
+            .catch(() => {
+                showToast("Request failed. Check your connection.", "danger");
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.innerHTML = 'Duplicate';
+            });
+    });
+    // Toggle paid status for selected lessons
+    document.getElementById("togglePaidOption").addEventListener("click", function () {
+        if (selectedLessons.size > 0) {
+            fetch("/toggle_paid", {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
-                    lesson_ids: Array.from(selectedLessons),
-                    copy_date: date
+                    lesson_ids: Array.from(selectedLessons)
                 })
             })
                 .then(res => {
                     if (res.ok) {
-                        showToast("Lessons duplicated!", "success");
-                        setTimeout(() => location.reload(), 1500);  // reload after short delay
+                        showToast("Lessons paid status updated!", "success");
+                        setTimeout(() => location.reload(), 1500);
                     } else {
                         showToast("Something went wrong.", "danger");
                         setTimeout(() => location.reload(), 1500);
                     }
                 })
                 .catch(() => {
-                    showToast("Request failed. Check your connection.", "danger");
-                })
-                .finally(() => {
-                    button.disabled = false;
-                    button.innerHTML = 'Duplicate';
+                    showToast("Request failed.", "danger");
                 });
-        });
-        // Toggle paid status for selected lessons
-        document.getElementById("togglePaidOption").addEventListener("click", function () {
-            if (selectedLessons.size > 0) {
-                fetch("/toggle_paid", {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        lesson_ids: Array.from(selectedLessons)
-                    })
-                })
-                    .then(res => {
-                        if (res.ok) {
-                            showToast("Lessons paid status updated!", "success");
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            showToast("Something went wrong.", "danger");
-                            setTimeout(() => location.reload(), 1500);
-                        }
-                    })
-                    .catch(() => {
-                        showToast("Request failed.", "danger");
-                    });
-            }
-        });
-        // Toggle unpaid status for selected lessons
-        document.getElementById("toggleUnpaidOption").addEventListener("click", function () {
-            if (selectedLessons.size > 0) {
-                fetch("/toggle_unpaid", {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        lesson_ids: Array.from(selectedLessons)
-                    })
-                })
-                    .then(res => {
-                        if (res.ok) {
-                            showToast("Lessons paid status updated!", "success");
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            showToast("Something went wrong.", "danger");
-                            setTimeout(() => location.reload(), 1500);
-                        }
-                    })
-                    .catch(() => {
-                        showToast("Request failed.", "danger");
-                    });
-            }
-        });
-
-
-        document.getElementById("toggleDeleteOption").addEventListener("click", function () {
-            if (selectedLessons.size === 0) {
-                showToast("No lessons selected.", "warning");
-                return;
-            }
-
-            showConfirmationModal({
-                title: "Delete Selected Lessons",
-                message: "Are you sure you want to delete these classes?",
-                confirmText: "Delete",
-                confirmClass: "btn-danger",
-                onConfirm: () => {
-                    fetch("/toggle_delete", {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            lesson_ids: Array.from(selectedLessons)
-                        })
-                    })
-                        .then(res => {
-                            if (res.ok) {
-                                showToast("Lessons successfully deleted!", "success");
-                            } else {
-                                showToast("Something went wrong while deleting lessons.", "danger");
-                            }
-                            setTimeout(() => location.reload(), 1500);
-                        })
-                        .catch(() => {
-                            showToast("Request failed.", "danger");
-                        });
-                }
-            });
-        });
-
+        }
     });
+    // Toggle unpaid status for selected lessons
+    document.getElementById("toggleUnpaidOption").addEventListener("click", function () {
+        if (selectedLessons.size > 0) {
+            fetch("/toggle_unpaid", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    lesson_ids: Array.from(selectedLessons)
+                })
+            })
+                .then(res => {
+                    if (res.ok) {
+                        showToast("Lessons paid status updated!", "success");
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        showToast("Something went wrong.", "danger");
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                })
+                .catch(() => {
+                    showToast("Request failed.", "danger");
+                });
+        }
+    });
+
+
+    document.getElementById("toggleDeleteOption").addEventListener("click", function () {
+        if (selectedLessons.size === 0) {
+            showToast("No lessons selected.", "warning");
+            return;
+        }
+
+        showConfirmationModal({
+            title: "Delete Selected Lessons",
+            message: "Are you sure you want to delete these classes?",
+            confirmText: "Delete",
+            confirmClass: "btn-danger",
+            onConfirm: () => {
+                fetch("/toggle_delete", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        lesson_ids: Array.from(selectedLessons)
+                    })
+                })
+                    .then(res => {
+                        if (res.ok) {
+                            showToast("Lessons successfully deleted!", "success");
+                        } else {
+                            showToast("Something went wrong while deleting lessons.", "danger");
+                        }
+                        setTimeout(() => location.reload(), 1500);
+                    })
+                    .catch(() => {
+                        showToast("Request failed.", "danger");
+                    });
+            }
+        });
+    });
+
     // Submit function to send selected IDs to backend
     function submitSelectedLessons() {
         const form = document.getElementById('selectionForm');
