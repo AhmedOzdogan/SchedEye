@@ -396,6 +396,25 @@ def contact():
         contact_email = ''
 
     if request.method == 'POST':
+        
+        # reCAPTCHA verification    
+        recaptcha_token = request.form.get('recaptcha_token')
+        secret = os.getenv('RECAPTCHA_SECRET_KEY')
+
+        recaptcha_response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': secret,
+                'response': recaptcha_token
+            }
+        )
+        result = recaptcha_response.json()
+        print("reCAPTCHA result:", result.get('score'))  # Optional logging
+        
+        # Check reCAPTCHA result
+        if not result.get('success') or result.get('score', 0) < 0.5:
+            return redirect(url_for('contact'))
+        
         contact_email = request.form.get('email', '').strip()
         message = request.form.get('message', '').strip()
         topic = request.form.get('topic', '').strip()
@@ -440,7 +459,7 @@ def contact():
         # Redirect to prevent form resubmission
         return redirect(url_for('contact'))
 
-    return render_template('contact.html', email=contact_email)
+    return render_template('contact.html', email=contact_email, recaptcha_site_key=os.getenv('RECAPTCHA_SITE_KEY'))
 
 # Features route
 @app.route('/features')

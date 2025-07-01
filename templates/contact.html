@@ -2,6 +2,20 @@
 
 {% block title %}Contact Us{% endblock %}
 
+{% block styles %}
+<style>
+    .grecaptcha-badge {
+        z-index: 9999;
+        /* Make sure it's on top */
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        /* or left: 20px; */
+    }
+</style>
+
+{% endblock %}
+
 {% block body %}
 <div class="container-fluid p-0">
     <div class="row g-0" style="min-height: 60vh;">
@@ -54,6 +68,7 @@
                                         <textarea class="form-control" id="message" name="message" rows="5"
                                             required></textarea>
                                     </div>
+                                    <input type="hidden" name="recaptcha_token" id="recaptcha_token">
                                     <div class="d-grid">
                                         <button type="submit" class="btn btn-primary btn-lg"
                                             id="submitButton">Submit</button>
@@ -71,6 +86,8 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}"></script>
+
 <script>
     window.addEventListener('DOMContentLoaded', function () {
         const form = document.getElementById('contactForm');
@@ -81,6 +98,25 @@
                 button.disabled = true;
                 button.innerText = 'Sending...';
             });
+        }
+    });
+
+
+
+
+    // reCAPTCHA v3 Token Injection
+    document.addEventListener("DOMContentLoaded", function () {
+        if (typeof grecaptcha !== 'undefined') {
+            grecaptcha.ready(function () {
+                grecaptcha.execute('{{ recaptcha_site_key }}', { action: 'login' }).then(function (token) {
+                    const input = document.getElementById('recaptcha_token');
+                    if (input) {
+                        input.value = token;
+                    }
+                });
+            });
+        } else {
+            console.error("reCAPTCHA script not loaded.");
         }
     });
 </script>
