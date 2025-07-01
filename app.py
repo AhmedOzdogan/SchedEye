@@ -200,7 +200,8 @@ def login():
         user_agent = request.user_agent.string
         user = get_user('email', email)
         now = datetime.now(UTC)
-        ip = request.remote_addr
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        print("IP Address:", ip)  # Optional logging
         
         # reCAPTCHA verification    
         recaptcha_token = request.form.get('recaptcha_token')
