@@ -26,6 +26,7 @@ def send_email(to, subject, html_body):
     try:
         mail.send(msg)
         print(f"✅ Email sent to {to}")
+        print("Sending from:", os.getenv('EMAIL_NOREPLY_USERNAME'))
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
 

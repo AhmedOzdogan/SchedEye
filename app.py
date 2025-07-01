@@ -282,7 +282,7 @@ def login():
             )
             db.session.add(session_entry)
             db.session.commit()
-            flash("Please confirm your email.", "danger")
+            flash("Please confirm your email. Confirmation email sent again.", "danger")
             return redirect(url_for('login'))
 
         # 4. If password is wrong
@@ -1883,16 +1883,16 @@ def calculate_hours():
 
 
 # Debug route to test email sending
-# @app.route('/test_register_email') # type: ignore
+@app.route('/test_register_email') # type: ignore
 
-# def test_register_email():
-#     send_email(
-#             "admin@schedeye.com",
-#             "New Contact Form Submission",
-#             f"Email: {"deneme"}\nTopic: {"topic"}\nMessage: {"message"}"
-#         )
+def test_register_email():
+    send_email(
+            "99defd5a0a00@maileroo-tester.com",
+            "New Contact Form Submission",
+            f"Email: {"deneme"}\nTopic: {"topic"}\nMessage: {"message"}"
+        )
 
-#     return "Email sent successfully!"
+    return "Email sent successfully!"
 
 
 if __name__ == '__main__':
