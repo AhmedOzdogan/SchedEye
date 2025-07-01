@@ -214,6 +214,7 @@ def login():
             }
         )
         result = recaptcha_response.json()
+        print("reCAPTCHA result:", result.get('score'))  # Optional logging
         
         # Check reCAPTCHA result
         if not result.get('success') or result.get('score', 0) < 0.5:
@@ -376,6 +377,7 @@ def login():
         print(session['search_date'])
         
         return redirect(url_for('dashboard'))
+    
 
 
     return render_template('login.html', recaptcha_site_key=os.getenv('RECAPTCHA_SITE_KEY'))

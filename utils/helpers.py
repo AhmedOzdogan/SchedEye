@@ -8,6 +8,9 @@ from flask_login import current_user
 from flask_mail import Message
 from sqlalchemy import asc, distinct, func, extract 
 from models import TeachingSchedule
+from datetime import date, time
+
+from models import db
 
 
 
