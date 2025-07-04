@@ -161,26 +161,56 @@ def get_user(field, value):
 
     # Query the user
     return db.session.query(User).filter(column == value).first()
-
-# Decorator to require admin access
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or current_user.user_type != 'admin':
-                    
-            user_session = UserSession(
-                user_id=current_user.id,  # type: ignore
-                ip_address=request.remote_addr,  # type: ignore
-                user_agent=request.user_agent.string,  # type: ignore
-                session_token=session.get('session_token'),  # type: ignore
-                login_time=datetime.now(UTC),  # type: ignore
-                status='admin_access_denied'  # type: ignore
-            )
-            db.session.add(user_session)
-            db.session.commit()
-            
+        try:
+            if not current_user.is_authenticated or current_user.user_type != 'admin':
+                try:
+                    # Try to assign user_id if user is authenticated
+                    user_id = current_user.id if current_user.is_authenticated else None
+
+                    # Attempt to create session with user_id
+                    user_session = UserSession(
+                        user_id=user_id,  # must be nullable in model if user_id is None # type: ignore
+                        ip_address=request.remote_addr,  # type: ignore
+                        user_agent=request.user_agent.string,  # type: ignore
+                        session_token=session.get('session_token'),  # type: ignore
+                        login_time=datetime.now(UTC),  # type: ignore
+                        status='admin_access_denied'  # type: ignore
+                    )
+                    db.session.add(user_session)
+                    db.session.commit()
+
+                except Exception as log_error:
+                    print(f"[Admin Check] Failed to log with user_id: {log_error}")
+
+                    # Try fallback without user_id
+                    try:
+                        user_session = UserSession(
+                            ip_address=request.remote_addr, # type: ignore
+                            user_agent=request.user_agent.string, # type: ignore
+                            session_token=session.get('session_token'), # type: ignore
+                            login_time=datetime.now(UTC), # type: ignore
+                            status='admin_access_denied' # type: ignore
+                        )
+                        db.session.add(user_session)
+                        db.session.commit()
+                    except Exception as fallback_error:
+                        print(f"[Admin Check] Fallback log failed: {fallback_error}")
+
+                # Log out user if needed
+                if current_user.is_authenticated:
+                    logout_user()
+
+                return render_template('abort.html'), 403
+
+            return f(*args, **kwargs)
+
+        except Exception as outer_error:
+            print(f"[Admin Check] Unexpected error: {outer_error}")
             return render_template('abort.html'), 403
-        return f(*args, **kwargs)
+
     return decorated_function
 
 # Load user by ID
