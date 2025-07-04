@@ -33,7 +33,7 @@ class UserSession(db.Model):
     __tablename__ = 'user_sessions'
 
     id = db.Column(db.Integer, primary_key=True) # Unique ID for each session
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id')) # Foreign key to the User model
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable = True) # Foreign key to the User model
     login_time = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp()) # Login time of the session
     logout_time = db.Column(db.DateTime) # Logout time of the session, can be null if user is still logged in
     ip_address = db.Column(db.String(45)) # IP address of the user during the session

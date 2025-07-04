@@ -173,7 +173,7 @@ def admin_required(f):
                     # Attempt to create session with user_id
                     user_session = UserSession(
                         user_id=user_id,  # must be nullable in model if user_id is None # type: ignore
-                        ip_address=request.remote_addr,  # type: ignore
+                        ip_address=request.headers.get('X-Forwarded-For', request.remote_addr),  # type: ignore
                         user_agent=request.user_agent.string,  # type: ignore
                         session_token=session.get('session_token'),  # type: ignore
                         login_time=datetime.now(UTC),  # type: ignore
@@ -188,7 +188,7 @@ def admin_required(f):
                     # Try fallback without user_id
                     try:
                         user_session = UserSession(
-                            ip_address=request.remote_addr, # type: ignore
+                            ip_address=request.headers.get('X-Forwarded-For', request.remote_addr), # type: ignore
                             user_agent=request.user_agent.string, # type: ignore
                             session_token=session.get('session_token'), # type: ignore
                             login_time=datetime.now(UTC), # type: ignore
@@ -1313,7 +1313,7 @@ def admin_sessions():
         'status': request.args.get('status', '').strip(),
     }
 
-    query = UserSession.query.join(User).order_by(UserSession.login_time.desc())
+    query = UserSession.query.outerjoin(User).order_by(UserSession.login_time.desc())
 
     if filters['user_id']:
         query = query.filter(User.id.cast(db.String).ilike(f"%{filters['user_id']}%"))
@@ -1342,6 +1342,8 @@ def admin_sessions():
             s.duration = "Session failed due to account being blocked."
         elif s.status == 'invalid_captcha':
             s.duration = "Session failed due to invalid CAPTCHA."
+        elif s.status == 'admin_access_denied':
+            s.duration = "Unauthorized access attempt."
         else:
             s.duration = "Session is active or expired."
 

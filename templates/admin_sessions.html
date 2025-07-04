@@ -41,6 +41,9 @@
                     <option value="blocked" {% if filters.status=='blocked' %}selected{% endif %}>Blocked</option>
                     <option value="invalid_captcha" {% if filters.status=='invalid_captcha' %}selected{% endif %}>
                         Invalid CAPTCHA</option>
+                    <option value="admin_access_denied" {% if filters.status=='admin_access_denied' %}selected{% endif
+                        %}>
+                        Admin Access Denied</option>
                 </select>
             </div>
             <div class="col-md-1">
