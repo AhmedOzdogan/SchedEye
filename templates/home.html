@@ -34,8 +34,8 @@
         </div>
         <div class="col-12 col-md-5 text-start">
             <img src="{{ url_for('static', filename='images/home/tiredteacher.jpg') }}"
-                class="img-fluid rounded shadow w-100" style="max-height: 320px; object-fit: cover;"
-                alt="Tired Teacher">
+                class="img-fluid rounded shadow w-100" style="max-height: 320px; object-fit: cover;" alt="Tired Teacher"
+                width="1200" height="320" fetchpriority="high" loading="eager">
             <p class="text-muted small mt-1">Still using Excel and sticky notes?</p>
         </div>
     </div>
@@ -43,7 +43,8 @@
     <!-- Screenshot Preview / Desktop -->
     <div class="text-center my-5 d-none d-md-block">
         <img src="{{ url_for('static', filename='images/home/home_page.jpg') }}" alt="SchedEye Desktop Preview"
-            class="img-fluid rounded shadow" style="max-width: 100%; height: auto;">
+            class="img-fluid rounded shadow" style="max-width: 100%; height: auto;" width="1200" height="600"
+            fetchpriority="high" loading="eager">
         <p class="text-muted mt-2">A glimpse of your smart dashboard (Desktop View)</p>
     </div>
 
@@ -52,15 +53,18 @@
         <div class="row g-3 justify-content-center">
             <div class="col-6">
                 <img src="{{ url_for('static', filename='images/home/mobile_page1.png') }}"
-                    alt="SchedEye Mobile Preview 1" class="img-fluid rounded shadow">
+                    alt="SchedEye Mobile Preview 1" class="img-fluid rounded shadow" width="600" height="1200"
+                    loading="lazy">
             </div>
             <div class="col-6">
                 <img src="{{ url_for('static', filename='images/home/mobile_page2.png') }}"
-                    alt="SchedEye Mobile Preview 2" class="img-fluid rounded shadow">
+                    alt="SchedEye Mobile Preview 2" class="img-fluid rounded shadow" width="600" height="1200"
+                    loading="lazy">
             </div>
             <div class="col-6">
                 <img src="{{ url_for('static', filename='images/home/mobile_page3.png') }}"
-                    alt="SchedEye Mobile Preview 3" class="img-fluid rounded shadow">
+                    alt="SchedEye Mobile Preview 3" class="img-fluid rounded shadow" width="600" height="1200"
+                    loading="lazy">
             </div>
         </div>
         <p class="text-muted mt-3">Your dashboard at your fingertips (Mobile View)</p>
@@ -86,8 +90,8 @@
         </div>
         <div class="col-12 col-md-5 order-1 order-md-2 text-end">
             <img src="{{ url_for('static', filename='images/home/happyteacher.jpg') }}"
-                class="img-fluid rounded shadow w-100" style="max-height: 320px; object-fit: cover;"
-                alt="Happy Teacher">
+                class="img-fluid rounded shadow w-100" style="max-height: 320px; object-fit: cover;" alt="Happy Teacher"
+                width="1200" height="320" fetchpriority="high" loading="eager">
             <p class="text-muted small mt-1">Let SchedEye simplify your teaching life.</p>
         </div>
 

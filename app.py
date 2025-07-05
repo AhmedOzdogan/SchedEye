@@ -247,6 +247,7 @@ def login():
         result = recaptcha_response.json()
         print("reCAPTCHA result:", result.get('score'))  # Optional logging
         
+
         # Check reCAPTCHA result
         if not result.get('success') or result.get('score', 0) < 0.5:
             print("reCAPTCHA failed:", result)  # Optional logging
@@ -262,7 +263,6 @@ def login():
             db.session.add(session_entry)
             db.session.commit()
             return redirect(url_for('login'))
-    
         
 
         # 1. If user is None (invalid email)
