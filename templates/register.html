@@ -6,6 +6,19 @@
 
 {% endblock %}
 
+{% block styles %}
+<style>
+    .grecaptcha-badge {
+        z-index: 9999;
+        /* Make sure it's on top */
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        /* or left: 20px; */
+    }
+</style>
+
+{% endblock %}
 {% block body %}
 <div class="container d-flex flex-column align-items-center justify-content-center py-5" style="min-height: 80vh;">
     <!-- Hide logo on small screens -->
@@ -66,12 +79,17 @@
             {% endfor %}
             {% endif %}
             {% endwith %}
+
+            <input type="hidden" name="recaptcha_token" id="recaptcha_token">
         </form>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
+<script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}"></script>
+
 <script>
     // Password Toggle
     document.addEventListener("DOMContentLoaded", function () {
@@ -87,5 +105,21 @@
             });
         }
     });
+    // reCAPTCHA v3 Token Injection
+    document.addEventListener("DOMContentLoaded", function () {
+        if (typeof grecaptcha !== 'undefined') {
+            grecaptcha.ready(function () {
+                grecaptcha.execute('{{ recaptcha_site_key }}', { action: 'login' }).then(function (token) {
+                    const input = document.getElementById('recaptcha_token');
+                    if (input) {
+                        input.value = token;
+                    }
+                });
+            });
+        } else {
+            console.error("reCAPTCHA script not loaded.");
+        }
+    });
+
 </script>
 {% endblock %}

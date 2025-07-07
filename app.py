@@ -528,6 +528,10 @@ def confirm_email(token):
 # Route to register a new user
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    user_agent = request.headers.get('User-Agent')
+    now = datetime.utcnow()
+
     global currency_codes
     
     if request.method == 'POST':
@@ -535,10 +539,42 @@ def register():
         email = request.form['email']
         password = request.form['password']
         password_again = request.form['password_again']
+        captcha_token = request.form.get('recaptcha_token')
 
         # Handle currency fallback
         currency_input = request.form['currency'].strip()
         currency = f' {currency_input}' if currency_input else ' USD'
+
+        # reCAPTCHA verification    
+        recaptcha_token = request.form.get('recaptcha_token')
+        secret = os.getenv('RECAPTCHA_SECRET_KEY')
+
+        recaptcha_response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': secret,
+                'response': recaptcha_token
+            }
+        )
+        result = recaptcha_response.json()
+        print("reCAPTCHA result:", result.get('score'))  # Optional logging
+        
+
+        # Check reCAPTCHA result
+        if not result.get('success') or result.get('score', 0) < 0.5:
+            print("reCAPTCHA failed:", result)  # Optional logging
+            flash("reCAPTCHA verification failed. Please try again!", "danger")
+            session_entry = UserSession(
+                user_id=None, # type: ignore
+                ip_address=ip, # type: ignore
+                user_agent=user_agent, # type: ignore
+                session_token=None, # type: ignore
+                login_time=now, # type: ignore
+                status='invalid_captcha' # type: ignore
+            )
+            db.session.add(session_entry)
+            db.session.commit()
+            return redirect(url_for('login'))
 
         # Validation checks
         if get_user('email', email):
@@ -587,7 +623,7 @@ def register():
         time.sleep(2)
         return redirect(url_for('login'))
 
-    return render_template('register.html', currency_codes=currency_codes)
+    return render_template('register.html', currency_codes=currency_codes, recaptcha_site_key=os.getenv('RECAPTCHA_SITE_KEY'))
 
 # Route to handle password reset
 @app.route('/forgot_password', methods=['GET', 'POST'])
@@ -595,7 +631,39 @@ def forgot_password():
     if request.method == 'POST':
         email = request.form['email']
         user = get_user('email', email)
-        ip = request.remote_addr
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        
+        # reCAPTCHA verification    
+        recaptcha_token = request.form.get('recaptcha_token')
+        secret = os.getenv('RECAPTCHA_SECRET_KEY')
+
+        recaptcha_response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': secret,
+                'response': recaptcha_token
+            }
+        )
+        result = recaptcha_response.json()
+        print("reCAPTCHA result:", result.get('score'))  # Optional logging
+        
+
+        # Check reCAPTCHA result
+        if not result.get('success') or result.get('score', 0) < 0.5:
+            print("reCAPTCHA failed:", result)  # Optional logging
+            flash("reCAPTCHA verification failed. Please try again!", "danger")
+            session_entry = UserSession(
+                user_id=None, # type: ignore
+                ip_address=ip, # type: ignore
+                user_agent=user_agent, # type: ignore
+                session_token=None, # type: ignore
+                login_time=now, # type: ignore
+                status='invalid_captcha' # type: ignore
+            )
+            db.session.add(session_entry)
+            db.session.commit()
+            return redirect(url_for('login'))
+        
 
         if user.blocked: # type: ignore
             flash('Your account has been blocked. Please contact <admin@schedeye.com> for assistance.', 'danger')
@@ -626,7 +694,7 @@ def forgot_password():
         flash('If your email exists, a reset link has been sent.', 'info')
         return redirect(url_for('login'))
 
-    return render_template('forgot_password.html')
+    return render_template('forgot_password.html', recaptcha_site_key=os.getenv('RECAPTCHA_SITE_KEY'))
 
 # Route to reset password using a token
 @app.route('/reset_password/<token>', methods=['GET', 'POST'])
@@ -1946,6 +2014,9 @@ def test_register_email():
 
     return "Email sent successfully!"
 
+@app.route('/test_forgot_password_email') # type: ignore
+def test_forgot_password_email():
+    return render_template('reset_password.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
