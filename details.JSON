@@ -1,0 +1,114 @@
+{
+  "title": "SchedEye — Web-Based Teaching Schedule Manager",
+  "description": "Modern, mobile-first app for freelance teachers and small institutes to plan weekly lessons, track payments, and monitor login activity.",
+  "keywords": [
+    "Flask",
+    "Python",
+    "Bootstrap 5",
+    "MySQL",
+    "SQLAlchemy",
+    "Authentication",
+    "CRUD",
+    "Responsive Design",
+    "Payment Tracking",
+    "Admin Panel",
+    "Session Management",
+    "Rate Limiting"
+  ],
+  "links": {
+    "live_site": "https://schedeye.com",
+    "repo": "",
+    "docs": ""
+  },
+  "demo_account": {
+    "email": "ahmed_ozdogan@gmail.com",
+    "password": "TeacherAhmed1",
+    "note": "Demo credentials for preview only."
+  },
+  "technologies": {
+    "backend": ["Flask (Python)", "SQLAlchemy", "MySQL"],
+    "technologies": {
+      "backend": ["Flask (Python)", "SQLAlchemy", "MySQL"],
+      "frontend": ["HTML5", "Bootstrap 5", "JavaScript (vanilla)"],
+      "auth": [
+        "Flask-Login (session-based)",
+        "Password hashing",
+        "Rate limiting"
+      ],
+      "deployment": ["Railway.app", "Gunicorn"],
+      "extras": ["Flask-Mail", "Google reCAPTCHA", "IP geolocation"]
+    },
+    "features": {
+      "authentication": [
+        "Hashed passwords with session-based login",
+        "Rate limiting after failed attempts",
+        "Admin user management"
+      ],
+      "schedule_management": [
+        "Add, edit, delete lessons by date",
+        "Weekly, mobile-responsive timetable with context menus",
+        "Bulk mark lessons as paid/unpaid",
+        "Calculate hours and payments by month, school, or year"
+      ],
+      "payments": [
+        "Totals for earned, pending, and received",
+        "Visual indicators for payment status"
+      ],
+      "login_history": [
+        "Last login timestamp, IP, and location",
+        "Chart of recent login attempts",
+        "Suspicious activity flags"
+      ],
+      "ux": [
+        "Onboarding tips for new users",
+        "Light/Dark mode",
+        "Tooltips, toasts, and icon-based UI"
+      ]
+    },
+    "/payments": "Payment tracking and summaries",
+    "/calculate-hours": "Hours & payment calculations",
+    "/settings": "Account settings",
+    "/features": "Product features overview",
+    "/admin/users": "Admin — user management",
+    "/login-history": "Login history and activity"
+  },
+  "data_model": {
+    "users": [
+      "id",
+      "email",
+      "hashed_password",
+      "role",
+      "last_login_at",
+      "last_login_ip"
+    ],
+    "lessons": [
+      "id",
+      "user_id",
+      "school",
+      "class_name",
+      "date",
+      "start_time",
+      "end_time",
+      "rate",
+      "paid"
+    ],
+    "login_attempts": [
+      "id",
+      "user_id",
+      "timestamp",
+      "ip",
+      "location",
+      "success"
+    ]
+  },
+  "security": [
+    "Passwords stored as secure hashes",
+    "Session-based authentication",
+    "Optional reCAPTCHA on sensitive forms",
+    "Basic rate limiting for brute-force protection",
+    "Secrets loaded from environment (.env)"
+  ],
+  "images": ["", "", "", "", "", ""],
+  "version": "1.0.0",
+  "last_updated": "2025-08-26"
+}
