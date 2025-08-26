@@ -59,18 +59,11 @@
         <!-- Date input and hidden inside a form -->
         <div class="col-12 col-md-auto">
             <form method="GET" action="{{ url_for('dashboard') }}" id="dateSearchForm"
-                class="d-flex flex-wrap align-items-center gap-2 mb-0">
+                    class="d-flex flex-wrap align-items-center gap-2 mb-0">
                 <input type="date" id="selected_date" name="selected_date" class="form-control"
                     value="{{ selected_date or '' }}" required>
                 <input type="hidden" name="date_search_triggered" value="1">
             </form>
-        </div>
-
-        <!-- Button outside form, linked using `form` attribute -->
-        <div class="col-12 col-md-auto">
-            <button type="submit" form="dateSearchForm" class="btn btn-primary btn-sm w-100 w-md-auto">
-                <i class="bi bi-search"></i> Search
-            </button>
         </div>
 
         <!-- Add a Lesson button -->
@@ -123,12 +116,57 @@
 
 
 {% block body %}
-<h1 class="text-center my-3 text-primary fs-4 fs-md-2">
+<div class="d-flex flex-column align-items-center my-3">
+  <!-- Heading centered -->
+  <h1 class="text-primary fs-2 fs-md-2 mb-0 text-center">
     Weekly Schedule<br class="d-md-none" />
     <small class="d-block d-md-inline text-secondary">
-        ({{ start_date.strftime('%b %d') }} – {{ end_date.strftime('%b %d, %Y') }})
+      ({{ start_date.strftime('%b %d') }} – {{ end_date.strftime('%b %d, %Y') }})
     </small>
-</h1>
+  </h1>
+
+    <!-- Button centered -->
+ <button class="btn btn-primary mb-1 mt-3 d-flex align-items-center gap-2"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#collapseExample"
+        aria-expanded="false"
+        aria-controls="collapseExample">
+  <!-- Three line icon -->
+  <i class="bi bi-list"></i>
+  <span>Weekly Hours</span>
+</button>
+
+
+  <!-- Collapse below heading -->
+    <div class="collapse mt-3" id="collapseExample" style="width: 300px;">
+        <div class="card card-body">
+
+            <!-- Schools -->
+            <h6 class="text-primary mb-2">Hours by Company</h6>
+            <ul class="list-group list-group-flush mb-3">
+            {% for school, hours in weekly_hours.school.items() %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ school }}
+                <span class="badge bg-primary rounded-pill">{{ hours }} hours</span>
+            </li>
+            {% endfor %}
+            </ul>
+
+            <!-- Classes -->
+            <h6 class="text-success mb-2">Hours by Class</h6>
+            <ul class="list-group list-group-flush">
+            {% for cls, hours in weekly_hours.class.items() %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ cls }}
+                <span class="badge bg-success rounded-pill">{{ hours }} hours</span>
+            </li>
+            {% endfor %}
+            </ul>
+
+        </div>
+    </div>
+</div>
 
 <!-- DESKTOP / TABLET VIEW -->
 <div class="table-responsive d-none d-md-block">
@@ -384,7 +422,7 @@
 
 
     let selectedLessons = new Set();
-    let selectedLessonId = null; // Declare it globally
+    let selectedLessonId = null;
 
     function showToast(message, type = 'success') {
         const toastEl = document.getElementById('feedbackToast');
@@ -436,8 +474,6 @@
         // Show overlay
         document.getElementById('loadingOverlay').style.display = 'flex';
 
-        // Simulate your async operation (AJAX/fetch)
-        // Replace this setTimeout with your actual logic
         setTimeout(() => {
             // Example: close modal and reset
             document.getElementById('loadingOverlay').style.display = 'none';
@@ -929,6 +965,11 @@ Duplicating...`;
         if (steps.length > 0) {
             showStep(0);
         }
+    });
+
+    // Auto-submit date filter form on change
+    document.getElementById("selected_date").addEventListener("change", function () {
+        document.getElementById("dateSearchForm").submit();
     });
 </script>
 {% endblock %}

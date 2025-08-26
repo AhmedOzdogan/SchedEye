@@ -27,6 +27,7 @@ from models import User, UserSession, TeachingSchedule, AdminActionLog, db
 
 # Initialize Flask app and extensions
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # Cache static files for 1 year
 app.secret_key = 'your_secret_key'
 
 login_manager = LoginManager()
@@ -796,6 +797,48 @@ def dashboard():
         .order_by(TeachingSchedule.date.asc(), TeachingSchedule.starttime.asc())
         .all()
     )
+    
+    # Calculate weekly hours per school
+    weekly_hours = {
+    "school": {},
+    "class": {}
+}
+
+# --- Hours per school ---
+    school_hours = (
+        db.session.query(
+            TeachingSchedule.school,
+            func.sum(
+                func.time_to_sec(
+                    func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+                ) / 3600
+            ).label("total_hours")
+        )
+        .filter(TeachingSchedule.date.between(start_date, end_date), TeachingSchedule.teacher_id == current_user.id)
+        .group_by(TeachingSchedule.school)
+        .all()
+    )
+
+    for school, hours in school_hours:
+        weekly_hours["school"][school] = round(hours or 0, 2)
+
+    # --- Hours per class prefix ---
+    class_hours = (
+        db.session.query(
+            func.substr(TeachingSchedule.class_name, 1, 3).label("cls_prefix"),
+            func.sum(
+                func.time_to_sec(
+                    func.timediff(TeachingSchedule.endtime, TeachingSchedule.starttime)
+                ) / 3600
+            ).label("total_hours")
+        )
+        .filter(TeachingSchedule.date.between(start_date, end_date), TeachingSchedule.teacher_id == current_user.id)
+        .group_by("cls_prefix")
+        .all()
+    )
+
+    for cls, hours in class_hours:
+        weekly_hours["class"][cls] = round(hours or 0, 2)
 
     # Generate week dates
     week_dates = []
@@ -817,7 +860,9 @@ def dashboard():
                            end_date=end_date,
                            show_tutorial=show_tutorial,
                            selected_date=selected_date,
-                           feature_list=feature_list,)
+                           feature_list=feature_list,
+                           weekly_hours=weekly_hours
+                           )
 
 # Route to mark the tutorial as seen
 # This route updates the session to hide the tutorial on the dashboard during the same session.
